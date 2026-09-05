@@ -124,11 +124,25 @@ function QuickCard({ icon: Icon, title, text, tone, onClick }: { icon: Icon; tit
 }
 
 function ChatsPage({ onOpenRoom, onRules }: { onOpenRoom: (room: Room) => void; onRules: () => void }) {
+  const [searchQuery, setSearchQuery] = useState('')
+  const normalizedQuery = searchQuery.trim().toLocaleLowerCase('ru-RU')
+  const filteredRooms = rooms.filter((room) => [room.name, room.description].some((value) => value.toLocaleLowerCase('ru-RU').includes(normalizedQuery)))
+
   return <section>
     <PageTitle title="Чаты" subtitle="Общайся с людьми своего города" action={<button className="icon-button" onClick={onRules} aria-label="Правила"><CircleHelp size={19} /></button>} />
-    <div className="search-box"><Search size={18} /><span>Поиск комнат</span></div>
+    <div className="search-box">
+      <Search size={18} />
+      <input
+        aria-label="Поиск комнат"
+        value={searchQuery}
+        onChange={(event) => setSearchQuery(event.target.value)}
+        placeholder="Поиск комнат"
+        style={{ width: '100%', border: 0, outline: 0, background: 'transparent', color: 'inherit', minWidth: 0, fontSize: 12 }}
+      />
+      {searchQuery && <button className="icon-button search-clear" onClick={() => setSearchQuery('')} aria-label="Очистить поиск"><X size={15} /></button>}
+    </div>
     <div className="online-banner"><span className="live-dot" /><strong>412</strong> человек сейчас онлайн <ArrowRight size={15} /></div>
-    <div className="room-list">{rooms.map((room) => <RoomRow key={room.id} room={room} large onClick={() => onOpenRoom(room)} />)}</div>
+    {filteredRooms.length > 0 ? <div className="room-list">{filteredRooms.map((room) => <RoomRow key={room.id} room={room} large onClick={() => onOpenRoom(room)} />)}</div> : <div className="empty-state"><Search size={22} /><strong>Ничего не найдено</strong><span>Попробуй другое название комнаты.</span></div>}
     <div className="feature-section"><div className="section-heading"><div><span className="section-kicker">Больше возможностей</span><h2>В чатах</h2></div></div><div className="feature-row"><Feature icon={Gift} title="Подарки" text="Отправляй друзьям" /><Feature icon={Sparkles} title="Цветной ник" text="Выделись в комнате" /><Feature icon={Ticket} title="Конкурсы" text="Участвуй и выигрывай" /></div></div>
   </section>
 }
