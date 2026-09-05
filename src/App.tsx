@@ -26,6 +26,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { getTelegramUser, initTelegramWebApp, type TelegramUser } from './telegram'
+import './notifications.css'
 
 type Tab = 'home' | 'chats' | 'dating' | 'city' | 'profile'
 type Icon = typeof Home
@@ -87,7 +88,7 @@ function App() {
   const unreadNotifications = notifications.filter((item) => !item.read).length
   const openTab = (tab: Tab) => { setSelectedRoom(null); setActiveTab(tab) }
   const openRoom = (room: Room) => { setSelectedRoom(room); setActiveTab('chats') }
-  const openNotifications = () => { setNotificationsOpen(true); setNotifications((current) => current.map((item) => ({ ...item, read: true }))) }
+  const openNotifications = () => setNotificationsOpen(true)
   const markAllNotificationsRead = () => setNotifications((current) => current.map((item) => ({ ...item, read: true })))
 
   return (
@@ -179,7 +180,8 @@ function ChatRoom({ room, onBack }: { room: Room; onBack: () => void }) {
 }
 
 function NotificationsModal({ notifications, onClose, onReadAll }: { notifications: Notification[]; onClose: () => void; onReadAll: () => void }) {
-  return <div className="modal-backdrop" onClick={onClose}><div className="modal notifications-modal" onClick={(event) => event.stopPropagation()}><div className="modal-header"><div><span className="section-kicker">Центр событий</span><h2>Уведомления</h2></div><button className="icon-button" onClick={onClose} aria-label="Закрыть"><X size={19} /></button></div><div className="notifications-list">{notifications.map(({ id, title, text, time, icon: Icon, read }) => <div className={`notification-item ${read ? 'is-read' : ''}`} key={id}><div className="notification-icon"><Icon size={18} /></div><div className="notification-content"><strong>{title}</strong><p>{text}</p><span>{time}</span></div>{!read && <i className="notification-unread" />}</div>)}</div><button className="primary-button notifications-read-button" onClick={onReadAll}>Прочитать всё</button></div></div>
+  const unreadCount = notifications.filter((item) => !item.read).length
+  return <div className="modal-backdrop" onClick={onClose}><div className="modal notifications-modal" onClick={(event) => event.stopPropagation()}><div className="modal-header"><div><span className="section-kicker">Центр событий</span><h2>Уведомления</h2></div><button className="icon-button" onClick={onClose} aria-label="Закрыть"><X size={19} /></button></div><div className="notifications-list">{notifications.map(({ id, title, text, time, icon: Icon, read }) => <div className={`notification-item ${read ? 'is-read' : ''}`} key={id}><div className="notification-icon"><Icon size={18} /></div><div className="notification-content"><strong>{title}</strong><p>{text}</p><span>{time}</span></div>{!read && <i className="notification-unread" />}</div>)}</div><button className="primary-button notifications-read-button" onClick={onReadAll} disabled={unreadCount === 0}>{unreadCount > 0 ? `Прочитать всё (${unreadCount})` : 'Всё прочитано'}</button></div></div>
 }
 
 function BottomNavigation({ activeTab, onChange }: { activeTab: Tab; onChange: (tab: Tab) => void }) { return <nav className="bottom-nav">{navItems.map(({ id, label, icon: Icon }) => <button key={id} className={activeTab === id ? 'active' : ''} onClick={() => onChange(id)}><Icon size={20} strokeWidth={activeTab === id ? 2.4 : 1.8} /><span>{label}</span>{activeTab === id && <i />}</button>)}</nav> }
