@@ -97,8 +97,8 @@ export function AuthScreen({ telegramUser }: AuthScreenProps) {
     const value = email.trim().toLowerCase()
     const token = code.trim()
 
-    if (!/^\d{6}$/.test(token)) {
-      setError('Введи 6-значный код из письма.')
+    if (!/^\d{8}$/.test(token)) {
+      setError('Введи 8-значный код из письма.')
       return
     }
 
@@ -343,16 +343,16 @@ export function AuthScreen({ telegramUser }: AuthScreenProps) {
                   setCode(
                     e.target.value
                       .replace(/\D/g, '')
-                      .slice(0, 6)
+                      .slice(0, 8)
                   )
 
                   setError('')
                 }}
-                placeholder="123456"
+                placeholder="12345678"
                 type="text"
                 inputMode="numeric"
                 autoComplete="one-time-code"
-                maxLength={6}
+                maxLength={8}
                 disabled={loading}
                 autoFocus
               />
@@ -361,7 +361,7 @@ export function AuthScreen({ telegramUser }: AuthScreenProps) {
             <button
               className="auth-button"
               onClick={verifyCode}
-              disabled={loading || code.length !== 6}
+              disabled={loading || code.length !== 8}
             >
               <ShieldCheck size={17} />
 
