@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Flag, Gift, MessageCircle, Send, ShieldCheck, UserPlus, Users, X } from 'lucide-react'
+import { Flag, Gift, MessageCircle, Send, ShieldCheck, UserPlus, X } from 'lucide-react'
 
 export type Person={id:number;name:string;avatar:string;username:string;online:boolean}
 export type ChatMessage={id:number;name:string;text:string;time:string;own:boolean}

@@ -26,6 +26,7 @@ export function AuthScreen({ telegramUser }: AuthScreenProps) {
           window.clearInterval(timer)
           return 0
         }
+
         return value - 1
       })
     }, 1000)
@@ -38,12 +39,21 @@ export function AuthScreen({ telegramUser }: AuthScreenProps) {
       <div className="auth-shell">
         <div className="auth-card">
           <div className="auth-logo">N</div>
-          <span className="auth-kicker">NUR_CHAT · АВТОРИЗАЦИЯ</span>
+
+          <span className="auth-kicker">
+            NUR_CHAT · АВТОРИЗАЦИЯ
+          </span>
+
           <h1>Добро пожаловать</h1>
+
           <p className="auth-subtitle">
-            Открой NUR_CHAT внутри Telegram, чтобы определить твой Telegram-профиль.
+            Открой NUR_CHAT внутри Telegram, чтобы определить твой
+            Telegram-профиль.
           </p>
-          <div className="auth-error">Открой приложение через Telegram.</div>
+
+          <div className="auth-error">
+            Открой приложение через Telegram.
+          </div>
         </div>
       </div>
     )
@@ -78,13 +88,16 @@ export function AuthScreen({ telegramUser }: AuthScreenProps) {
     setStep('code')
     setCode('')
     setCooldown(60)
-    setMessage('Код отправлен на почту. Введи его здесь, не закрывая NUR_CHAT.')
+    setMessage(
+      'Код отправлен на почту. Введи его здесь, не закрывая NUR_CHAT.'
+    )
   }
 
   const verifyCode = async () => {
-    const value = code.trim()
+    const value = email.trim().toLowerCase()
+    const token = code.trim()
 
-    if (!/^\d{6}$/.test(value)) {
+    if (!/^\d{6}$/.test(token)) {
       setError('Введи 6-значный код из письма.')
       return
     }
@@ -94,14 +107,20 @@ export function AuthScreen({ telegramUser }: AuthScreenProps) {
     setMessage('')
 
     const { data, error } = await supabase.auth.verifyOtp({
-      email: email.trim().toLowerCase(),
-      token: value,
+      email: value,
+      token,
       type: 'email',
     })
 
     if (error) {
       setLoading(false)
-      setError('Неверный или просроченный код. Проверь код и попробуй ещё раз.')
+
+      setError(
+        error.message === 'Token has expired or is invalid'
+          ? 'Неверный или просроченный код. Запроси новый код.'
+          : error.message
+      )
+
       return
     }
 
@@ -109,11 +128,16 @@ export function AuthScreen({ telegramUser }: AuthScreenProps) {
 
     if (!authUser) {
       setLoading(false)
-      setError('Код принят, но сессия не создалась. Попробуй войти ещё раз.')
+      setError(
+        'Код принят, но сессия не создалась. Попробуй войти ещё раз.'
+      )
       return
     }
 
-    const { data: existingProfile, error: profileCheckError } = await supabase
+    const {
+      data: existingProfile,
+      error: profileCheckError,
+    } = await supabase
       .from('profiles')
       .select('telegram_id')
       .eq('id', authUser.id)
@@ -121,17 +145,27 @@ export function AuthScreen({ telegramUser }: AuthScreenProps) {
 
     if (profileCheckError) {
       setLoading(false)
-      setError('Не удалось проверить профиль: ' + profileCheckError.message)
+
+      setError(
+        'Не удалось проверить профиль: ' +
+          profileCheckError.message
+      )
+
       await supabase.auth.signOut()
       return
     }
 
     if (
       existingProfile &&
-      Number(existingProfile.telegram_id) !== Number(telegramUser.id)
+      Number(existingProfile.telegram_id) !==
+        Number(telegramUser.id)
     ) {
       setLoading(false)
-      setError('Этот email уже привязан к другому Telegram-аккаунту.')
+
+      setError(
+        'Этот email уже привязан к другому Telegram-аккаунту.'
+      )
+
       await supabase.auth.signOut()
       return
     }
@@ -149,7 +183,12 @@ export function AuthScreen({ telegramUser }: AuthScreenProps) {
 
     if (profileError) {
       setLoading(false)
-      setError('Вход выполнен, но профиль не удалось сохранить: ' + profileError.message)
+
+      setError(
+        'Вход выполнен, но профиль не удалось сохранить: ' +
+          profileError.message
+      )
+
       return
     }
 
@@ -164,12 +203,18 @@ export function AuthScreen({ telegramUser }: AuthScreenProps) {
         })
 
       if (notificationError) {
-        console.warn('Не удалось создать приветственное уведомление:', notificationError.message)
+        console.warn(
+          'Не удалось создать приветственное уведомление:',
+          notificationError.message
+        )
       }
     }
 
     setLoading(false)
-    setMessage('Email подтверждён. Вход выполнен — открываем профиль…')
+
+    setMessage(
+      'Email подтверждён. Вход выполнен — открываем профиль…'
+    )
   }
 
   const resendCode = async () => {
@@ -217,7 +262,9 @@ export function AuthScreen({ telegramUser }: AuthScreenProps) {
       <div className="auth-card">
         <div className="auth-logo">N</div>
 
-        <span className="auth-kicker">NUR_CHAT · АВТОРИЗАЦИЯ</span>
+        <span className="auth-kicker">
+          NUR_CHAT · АВТОРИЗАЦИЯ
+        </span>
 
         <h1>Добро пожаловать</h1>
 
@@ -230,16 +277,23 @@ export function AuthScreen({ telegramUser }: AuthScreenProps) {
         <div className="auth-telegram">
           <div className="auth-avatar">
             {telegramUser.photo_url ? (
-              <img src={telegramUser.photo_url} alt="" />
+              <img
+                src={telegramUser.photo_url}
+                alt=""
+              />
             ) : (
               telegramUser.first_name[0]
             )}
           </div>
+
           <div>
             <strong>
               {telegramUser.first_name}
-              {telegramUser.last_name ? ' ' + telegramUser.last_name : ''}
+              {telegramUser.last_name
+                ? ' ' + telegramUser.last_name
+                : ''}
             </strong>
+
             <span>
               {telegramUser.username
                 ? '@' + telegramUser.username
@@ -252,6 +306,7 @@ export function AuthScreen({ telegramUser }: AuthScreenProps) {
           <>
             <label>
               Email
+
               <input
                 value={email}
                 onChange={e => {
@@ -271,20 +326,30 @@ export function AuthScreen({ telegramUser }: AuthScreenProps) {
               disabled={loading}
             >
               <Mail size={17} />
-              {loading ? 'Отправляем…' : 'Получить код'}
+
+              {loading
+                ? 'Отправляем…'
+                : 'Получить код'}
             </button>
           </>
         ) : (
           <>
             <label>
               Код из письма
+
               <input
                 value={code}
                 onChange={e => {
-                  setCode(e.target.value.replace(/\D/g, '').slice(0, 6))
+                  setCode(
+                    e.target.value
+                      .replace(/\D/g, '')
+                      .slice(0, 6)
+                  )
+
                   setError('')
                 }}
                 placeholder="123456"
+                type="text"
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 maxLength={6}
@@ -299,7 +364,10 @@ export function AuthScreen({ telegramUser }: AuthScreenProps) {
               disabled={loading || code.length !== 6}
             >
               <ShieldCheck size={17} />
-              {loading ? 'Проверяем…' : 'Подтвердить код'}
+
+              {loading
+                ? 'Проверяем…'
+                : 'Подтвердить код'}
             </button>
 
             <button
@@ -308,7 +376,9 @@ export function AuthScreen({ telegramUser }: AuthScreenProps) {
               disabled={cooldown > 0 || loading}
             >
               {cooldown > 0
-                ? 'Отправить код повторно через ' + cooldown + ' сек.'
+                ? 'Отправить код повторно через ' +
+                  cooldown +
+                  ' сек.'
                 : 'Отправить код повторно'}
             </button>
 
@@ -318,6 +388,7 @@ export function AuthScreen({ telegramUser }: AuthScreenProps) {
               disabled={loading}
             >
               <ArrowLeft size={15} />
+
               Изменить email
             </button>
           </>
@@ -330,10 +401,15 @@ export function AuthScreen({ telegramUser }: AuthScreenProps) {
           </div>
         )}
 
-        {error && <div className="auth-error">{error}</div>}
+        {error && (
+          <div className="auth-error">
+            {error}
+          </div>
+        )}
 
         <small className="auth-footnote">
-          Telegram используется для профиля, а email — для подтверждения входа.
+          Telegram используется для профиля, а email —
+          для подтверждения входа.
         </small>
       </div>
     </div>
