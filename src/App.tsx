@@ -1,27 +1,102 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Bell, ChevronRight, CircleAlert, Gift, Home, MessageCircle, UserRound, Users, Wallet } from 'lucide-react'
-import { getTelegramUser, initTelegramWebApp, type TelegramUser } from './telegram'
-import { ChatRoom, GiftModal, Modal, PeoplePage, PersonModal, FriendsPage, type Person } from './feature-components'
+import {
+  Bell,
+  ChevronRight,
+  CircleAlert,
+  Gift,
+  Home,
+  MessageCircle,
+  UserRound,
+  Users,
+  Wallet
+} from 'lucide-react'
+import {
+  getTelegramUser,
+  initTelegramWebApp,
+  type TelegramUser
+} from './telegram'
+import {
+  ChatRoom,
+  GiftModal,
+  Modal,
+  PeoplePage,
+  PersonModal,
+  FriendsPage,
+  type Person
+} from './feature-components'
 import { supabase } from './supabase'
 import { AuthScreen } from './auth'
 import './notifications.css'
 
 type Tab = 'home' | 'chats' | 'friends' | 'profile'
-type Notification = { id: number; title: string; text: string; time: string; read: boolean }
-type Transaction = { id: number; title: string; amount: number; time: string }
+
+type Notification = {
+  id: number
+  title: string
+  text: string
+  time: string
+  read: boolean
+}
+
+type Transaction = {
+  id: number
+  title: string
+  amount: number
+  time: string
+}
 
 const people: Person[] = [
-  { id: 1, name: 'Андрей', avatar: '👨🏻', username: 'andrey', online: true },
-  { id: 2, name: 'Мария', avatar: '👩🏻', username: 'maria', online: true },
-  { id: 3, name: 'Сергей', avatar: '👨🏼', username: 'sergey', online: false },
-  { id: 4, name: 'Алина', avatar: '👩🏻', username: 'alina', online: true }
+  {
+    id: 1,
+    name: 'Андрей',
+    avatar: '👨🏻',
+    username: 'andrey',
+    online: true
+  },
+  {
+    id: 2,
+    name: 'Мария',
+    avatar: '👩🏻',
+    username: 'maria',
+    online: true
+  },
+  {
+    id: 3,
+    name: 'Сергей',
+    avatar: '👨🏼',
+    username: 'sergey',
+    online: false
+  },
+  {
+    id: 4,
+    name: 'Алина',
+    avatar: '👩🏻',
+    username: 'alina',
+    online: true
+  }
 ]
 
 const nav = [
-  { id: 'home' as Tab, label: 'Главная', icon: Home },
-  { id: 'chats' as Tab, label: 'Чаты', icon: MessageCircle },
-  { id: 'friends' as Tab, label: 'Друзья', icon: Users },
-  { id: 'profile' as Tab, label: 'Профиль', icon: UserRound }
+  {
+    id: 'home' as Tab,
+    label: 'Главная',
+    icon: Home
+  },
+  {
+    id: 'chats' as Tab,
+    label: 'Чаты',
+    icon: MessageCircle
+  },
+  {
+    id: 'friends' as Tab,
+    label: 'Друзья',
+    icon: Users
+  },
+  {
+    id: 'profile' as Tab,
+    label: 'Профиль',
+    icon: UserRound
+  }
 ]
 
 export default function App() {
@@ -51,12 +126,19 @@ export default function App() {
     }
   ])
 
-  const [modal, setModal] = useState<'wallet' | 'notifications' | 'gifts' | 'person' | null>(null)
+  const [modal, setModal] = useState<
+    'wallet' | 'notifications' | 'gifts' | 'person' | null
+  >(null)
+
   const [selected, setSelected] = useState<Person | null>(null)
-  const [friends, setFriends] = useState<Person[]>(people.slice(0, 2))
+
+  const [friends, setFriends] = useState<Person[]>(
+    people.slice(0, 2)
+  )
 
   useEffect(() => {
     initTelegramWebApp()
+
     setUser(getTelegramUser())
 
     supabase.auth.getSession().then(({ data }) => {
@@ -71,13 +153,33 @@ export default function App() {
       setAuthReady(true)
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      subscription.unsubscribe()
+    }
   }, [])
+
+  /*
+   * ВАЖНО:
+   * useMemo должен находиться ДО условных return.
+   * Иначе порядок React Hooks меняется после авторизации,
+   * из-за чего приложение может падать с тёмным экраном.
+   */
+  const name = useMemo(
+    () =>
+      user
+        ? [user.first_name, user.last_name]
+            .filter(Boolean)
+            .join(' ')
+        : 'Гость',
+    [user]
+  )
 
   if (!authReady) {
     return (
       <div className="auth-shell">
-        <div className="auth-loading">NUR_CHAT</div>
+        <div className="auth-loading">
+          NUR_CHAT
+        </div>
       </div>
     )
   }
@@ -85,11 +187,6 @@ export default function App() {
   if (!session) {
     return <AuthScreen telegramUser={user} />
   }
-
-  const name = useMemo(
-    () => (user ? [user.first_name, user.last_name].filter(Boolean).join(' ') : 'Гость'),
-    [user]
-  )
 
   const notify = (title: string, text: string) =>
     setNotifications(v => [
@@ -116,21 +213,44 @@ export default function App() {
       ...v
     ])
 
-    notify('Nurcoin пополнен', 'На баланс добавлено ' + amount + ' NC.')
+    notify(
+      'Nurcoin пополнен',
+      'На баланс добавлено ' + amount + ' NC.'
+    )
   }
 
-  const sendGift = (price: number, gift: string, person: string) => {
+  const sendGift = (
+    price: number,
+    gift: string,
+    person: string
+  ) => {
     setBalance(v => Math.max(0, v - price))
-    notify('Подарок отправлен', gift + ' отправлен пользователю ' + person + '.')
+
+    notify(
+      'Подарок отправлен',
+      gift +
+        ' отправлен пользователю ' +
+        person +
+        '.'
+    )
+
     setModal(null)
   }
 
   const addFriend = (p: Person) => {
     if (!friends.some(f => f.id === p.id)) {
       setFriends(v => [...v, p])
-      notify('Новый друг', p.name + ' добавлен(а) в друзья.')
+
+      notify(
+        'Новый друг',
+        p.name + ' добавлен(а) в друзья.'
+      )
     } else {
-      notify('Уже в друзьях', p.name + ' уже есть в списке друзей.')
+      notify(
+        'Уже в друзьях',
+        p.name +
+          ' уже есть в списке друзей.'
+      )
     }
   }
 
@@ -173,7 +293,9 @@ export default function App() {
         {modal === 'person' && selected && (
           <PersonModal
             person={selected}
-            isFriend={friends.some(f => f.id === selected.id)}
+            isFriend={friends.some(
+              f => f.id === selected.id
+            )}
             onClose={() => setModal(null)}
             onAdd={() => addFriend(selected)}
             onChat={() => openChat(selected)}
@@ -188,8 +310,12 @@ export default function App() {
     <div className="app-shell">
       <main className="app-content">
         <TopBar
-          unread={notifications.filter(n => !n.read).length}
-          onNotifications={() => setModal('notifications')}
+          unread={
+            notifications.filter(n => !n.read).length
+          }
+          onNotifications={() =>
+            setModal('notifications')
+          }
         />
 
         {tab === 'home' && (
@@ -214,11 +340,15 @@ export default function App() {
               className="main-chat-card"
               onClick={() => setRoom(true)}
             >
-              <span className="main-chat-icon">💬</span>
+              <span className="main-chat-icon">
+                💬
+              </span>
 
               <div>
                 <strong>Общий чат</strong>
-                <small>247 онлайн · общайся со всеми</small>
+                <small>
+                  247 онлайн · общайся со всеми
+                </small>
               </div>
 
               <ChevronRight size={18} />
@@ -228,9 +358,13 @@ export default function App() {
               <MessageCircle size={18} />
 
               <div>
-                <strong>Личные сообщения</strong>
+                <strong>
+                  Личные сообщения
+                </strong>
+
                 <span>
-                  Открой профиль человека и нажми «Написать».
+                  Открой профиль человека и нажми
+                  «Написать».
                 </span>
               </div>
             </div>
@@ -306,7 +440,9 @@ export default function App() {
       {modal === 'person' && selected && (
         <PersonModal
           person={selected}
-          isFriend={friends.some(f => f.id === selected.id)}
+          isFriend={friends.some(
+            f => f.id === selected.id
+          )}
           onClose={() => setModal(null)}
           onAdd={() => addFriend(selected)}
           onChat={() => openChat(selected)}
@@ -328,11 +464,17 @@ function TopBar({
     <header className="topbar">
       <div className="brand-button">
         <div className="brand-mark">
-          <img src="/nur-chat-logo.svg" alt="" />
+          <img
+            src="/nur-chat-logo.svg"
+            alt=""
+          />
         </div>
 
         <div>
-          <div className="brand-name">NUR_CHAT</div>
+          <div className="brand-name">
+            NUR_CHAT
+          </div>
+
           <div className="brand-subtitle">
             общение · друзья · подарки
           </div>
@@ -372,18 +514,21 @@ function HomePage({
     <section>
       <div className="hero-block">
         <span className="eyebrow">
-          <MessageCircle size={13} /> Городской чат
+          <MessageCircle size={13} />
+          Городской чат
         </span>
 
         <h1>
           {name === 'Гость'
             ? 'Общайся. Находи друзей.'
-            : 'Привет, ' + name.split(' ')[0] + '.'}
+            : 'Привет, ' +
+              name.split(' ')[0] +
+              '.'}
         </h1>
 
         <p>
-          Общий чат, личные сообщения, друзья и виртуальные
-          подарки за Nurcoin.
+          Общий чат, личные сообщения, друзья и
+          виртуальные подарки за Nurcoin.
         </p>
       </div>
 
@@ -394,7 +539,8 @@ function HomePage({
         </div>
 
         <div className="balance-value">
-          {balance.toLocaleString('ru-RU')} <span>NC</span>
+          {balance.toLocaleString('ru-RU')}{' '}
+          <span>NC</span>
         </div>
 
         <div className="balance-bottomline">
@@ -404,14 +550,18 @@ function HomePage({
             className="small-action"
             onClick={onWallet}
           >
-            Пополнить <ChevronRight size={14} />
+            Пополнить
+            <ChevronRight size={14} />
           </button>
         </div>
       </div>
 
       <div className="section-heading">
         <div>
-          <span className="section-kicker">NUR_CHAT</span>
+          <span className="section-kicker">
+            NUR_CHAT
+          </span>
+
           <h2>Быстрый доступ</h2>
         </div>
       </div>
@@ -470,10 +620,13 @@ function HomePage({
         <CircleAlert size={18} />
 
         <div>
-          <strong>Обычный городской чат</strong>
+          <strong>
+            Обычный городской чат
+          </strong>
+
           <span>
-            Без знакомств 18+ и верификации. Есть жалобы и
-            модерация.
+            Без знакомств 18+ и верификации. Есть
+            жалобы и модерация.
           </span>
         </div>
       </div>
@@ -535,7 +688,10 @@ function ProfilePage({
       <div className="profile-card">
         <div className="profile-avatar">
           {user?.photo_url ? (
-            <img src={user.photo_url} alt="" />
+            <img
+              src={user.photo_url}
+              alt=""
+            />
           ) : (
             initials
           )}
@@ -550,7 +706,9 @@ function ProfilePage({
               : 'Telegram аккаунт'}
           </span>
 
-          {user && <small>ID: {user.id}</small>}
+          {user && (
+            <small>ID: {user.id}</small>
+          )}
         </div>
       </div>
 
@@ -570,7 +728,9 @@ function ProfilePage({
 
           <div>
             <strong>Nurcoin</strong>
-            <small>Баланс, пополнение и история</small>
+            <small>
+              Баланс, пополнение и история
+            </small>
           </div>
 
           <ChevronRight size={17} />
@@ -581,7 +741,9 @@ function ProfilePage({
 
           <div>
             <strong>Друзья</strong>
-            <small>{friends} человека в списке</small>
+            <small>
+              {friends} человека в списке
+            </small>
           </div>
 
           <ChevronRight size={17} />
@@ -591,8 +753,13 @@ function ProfilePage({
           <UserRound size={18} />
 
           <div>
-            <strong>Выйти из аккаунта</strong>
-            <small>Сбросить текущую Supabase-сессию</small>
+            <strong>
+              Выйти из аккаунта
+            </strong>
+
+            <small>
+              Сбросить текущую Supabase-сессию
+            </small>
           </div>
 
           <ChevronRight size={17} />
@@ -631,26 +798,40 @@ function WalletModal({
           <span>Текущий баланс</span>
 
           <strong>
-            {balance.toLocaleString('ru-RU')} <em>NC</em>
+            {balance.toLocaleString('ru-RU')}{' '}
+            <em>NC</em>
           </strong>
         </div>
 
-        <div className="wallet-coin">NC</div>
+        <div className="wallet-coin">
+          NC
+        </div>
       </div>
 
       <div className="wallet-section-head">
         <span>Пополнить баланс</span>
-        <small>Выбери пакет Nurcoin</small>
+        <small>
+          Выбери пакет Nurcoin
+        </small>
       </div>
 
       <div className="wallet-packs">
         {packs.map(([amount, price]) => (
           <button
-            className={amount === 500 ? 'popular' : ''}
+            className={
+              amount === 500
+                ? 'popular'
+                : ''
+            }
             key={amount}
-            onClick={() => onBuy(amount, price)}
+            onClick={() =>
+              onBuy(amount, price)
+            }
           >
-            <strong>{amount} NC</strong>
+            <strong>
+              {amount} NC
+            </strong>
+
             <span>{price}</span>
 
             {amount === 500 && (
@@ -664,31 +845,41 @@ function WalletModal({
         <Wallet size={15} />
 
         <span>
-          Сейчас это demo. После подключения YooKassa
-          оплата будет проходить через защищённую страницу,
-          а NC зачисляться после подтверждения платежа.
+          Сейчас это demo. После подключения
+          YooKassa оплата будет проходить через
+          защищённую страницу, а NC зачисляться
+          после подтверждения платежа.
         </span>
       </div>
 
       <div className="transaction-list">
         <div className="wallet-section-head">
-          <span>История операций</span>
-          <small>Последние операции</small>
+          <span>
+            История операций
+          </span>
+
+          <small>
+            Последние операции
+          </small>
         </div>
 
-        {transactions.slice(0, 5).map(t => (
-          <div
-            className="transaction-row"
-            key={t.id}
-          >
-            <span>
-              {t.title}
-              <small>{t.time}</small>
-            </span>
+        {transactions
+          .slice(0, 5)
+          .map(t => (
+            <div
+              className="transaction-row"
+              key={t.id}
+            >
+              <span>
+                {t.title}
+                <small>{t.time}</small>
+              </span>
 
-            <b>+{t.amount} NC</b>
-          </div>
-        ))}
+              <b>
+                +{t.amount} NC
+              </b>
+            </div>
+          ))}
       </div>
     </Modal>
   )
@@ -710,7 +901,9 @@ function NotificationsModal({
     >
       <div
         className="modal notifications-modal"
-        onClick={e => e.stopPropagation()}
+        onClick={e =>
+          e.stopPropagation()
+        }
       >
         <div className="modal-header">
           <div>
@@ -733,11 +926,14 @@ function NotificationsModal({
           <div className="notifications-empty">
             <Bell size={24} />
 
-            <strong>Пока нет уведомлений</strong>
+            <strong>
+              Пока нет уведомлений
+            </strong>
 
             <span>
-              Здесь появятся сообщения о друзьях,
-              подарках и других событиях.
+              Здесь появятся сообщения о
+              друзьях, подарках и других
+              событиях.
             </span>
           </div>
         ) : (
@@ -747,7 +943,9 @@ function NotificationsModal({
                 <div
                   className={
                     'notification-item ' +
-                    (n.read ? 'is-read' : '')
+                    (n.read
+                      ? 'is-read'
+                      : '')
                   }
                   key={n.id}
                 >
@@ -756,9 +954,15 @@ function NotificationsModal({
                   </div>
 
                   <div className="notification-content">
-                    <strong>{n.title}</strong>
+                    <strong>
+                      {n.title}
+                    </strong>
+
                     <p>{n.text}</p>
-                    <span>{n.time}</span>
+
+                    <span>
+                      {n.time}
+                    </span>
                   </div>
 
                   {!n.read && (
@@ -797,9 +1001,13 @@ function BottomNav({
           <button
             key={item.id}
             className={
-              active === item.id ? 'active' : ''
+              active === item.id
+                ? 'active'
+                : ''
             }
-            onClick={() => onChange(item.id)}
+            onClick={() =>
+              onChange(item.id)
+            }
           >
             <Icon size={19} />
             <span>{item.label}</span>
