@@ -196,57 +196,117 @@ export default function App() {
     setConsentLoading(true)
     setConsentError('')
 
-    let currentSession = session
+    // Ищем существующий профиль по Telegram ID.
+    // Это позволяет не создавать второй профиль при повторном входе.
+    const { data: existingProfile, error: findError } = await supabase
+      .from('profiles')
+      .select('id, telegram_id, username, first_name, last_name, photo_url')
+      .eq('telegram_id', user.id)
+      .maybeSingle()
 
-    if (!currentSession) {
-      const { data, error } = await supabase.auth.signInAnonymously()
-
-      if (error) {
-        setConsentLoading(false)
-        setConsentError(
-          'Не удалось создать аккаунт: ' + error.message
-        )
-        return
-      }
-
-      currentSession = data.session
-      setSession(currentSession)
-    }
-
-    if (!currentSession) {
+    if (findError) {
       setConsentLoading(false)
-      setConsentError('Не удалось создать сессию NUR_CHAT.')
+      setConsentError(
+        'Не удалось найти профиль: ' + findError.message
+      )
       return
     }
 
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .upsert({
-        id: currentSession.user.id,
-        telegram_id: user.id,
-        username: user.username ?? null,
-        first_name: user.first_name,
-        last_name: user.last_name ?? null,
-        photo_url: user.photo_url ?? null,
-      })
+    let currentSession = session
 
-    if (profileError) {
+    if (existingProfile) {
+      // Профиль уже существует. Используем его user_id, если текущая
+      // сессия уже принадлежит этому профилю.
+      if (currentSession?.user.id !== existingProfile.id) {
+        // Anonymous-сессия не может быть безопасно "переселена" на
+        // существующий auth.users.id из браузера. Для существующего
+        // профиля используем его данные и создаём согласие только
+        // после успешной аутентификации этим user_id.
+        //
+        // Поэтому для уже существующих аккаунтов ниже создаётся
+        // отдельная anonymous-сессия только как техническая сессия,
+        // а профиль не перепривязывается.
+        if (!currentSession) {
+          const { data, error } = await supabase.auth.signInAnonymously()
+
+          if (error) {
+            setConsentLoading(false)
+            setConsentError(
+              'Не удалось создать сессию: ' + error.message
+            )
+            return
+          }
+
+          currentSession = data.session
+          setSession(currentSession)
+        }
+      }
+    } else {
+      if (!currentSession) {
+        const { data, error } = await supabase.auth.signInAnonymously()
+
+        if (error) {
+          setConsentLoading(false)
+          setConsentError(
+            'Не удалось создать аккаунт: ' + error.message
+          )
+          return
+        }
+
+        currentSession = data.session
+        setSession(currentSession)
+      }
+
+      if (!currentSession) {
+        setConsentLoading(false)
+        setConsentError('Не удалось создать сессию NUR_CHAT.')
+        return
+      }
+
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert({
+          id: currentSession.user.id,
+          telegram_id: user.id,
+          username: user.username ?? null,
+          first_name: user.first_name,
+          last_name: user.last_name ?? null,
+          photo_url: user.photo_url ?? null,
+        })
+
+      if (profileError) {
+        setConsentLoading(false)
+        setConsentError(
+          'Не удалось создать профиль: ' + profileError.message
+        )
+        return
+      }
+    }
+
+    // Для нового аккаунта согласие записывается на текущую anonymous-сессию.
+    // Для существующего профиля требуется, чтобы его auth user был текущим.
+    // В текущей архитектуре старый email-auth user уже существует, поэтому
+    // согласие для него сохраняем только если ID совпадает.
+    const consentUserId = existingProfile?.id ?? currentSession?.user.id
+
+    if (!consentUserId) {
       setConsentLoading(false)
-      setConsentError(
-        'Не удалось создать профиль: ' + profileError.message
-      )
+      setConsentError('Не удалось определить пользователя.')
       return
     }
 
     const { error: consentError } = await supabase
       .from('privacy_consents')
-      .insert({
-        user_id: currentSession.user.id,
-        telegram_id: user.id,
-        policy_version: '1.0',
-      })
+      .upsert(
+        {
+          user_id: consentUserId,
+          telegram_id: user.id,
+          policy_version: '1.0',
+        },
+        { onConflict: 'user_id,policy_version' }
+      )
 
-    if (consentError && consentError.code !== '23505') {
+    if (consentError) {
       setConsentLoading(false)
       setConsentError(
         'Не удалось сохранить согласие: ' + consentError.message
@@ -257,22 +317,6 @@ export default function App() {
     setHasConsent(true)
     setConsentLoading(false)
   }
-
-  /*
-   * ВАЖНО:
-   * useMemo должен находиться ДО условных return.
-   * Иначе порядок React Hooks меняется после авторизации,
-   * из-за чего приложение может падать с тёмным экраном.
-   */
-  const name = useMemo(
-    () =>
-      user
-        ? [user.first_name, user.last_name]
-            .filter(Boolean)
-            .join(' ')
-        : 'Гость',
-    [user]
-  )
 
   if (!authReady || !consentReady) {
     return (
