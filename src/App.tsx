@@ -25,7 +25,7 @@ import {
   type Person
 } from './feature-components'
 import { supabase } from './supabase'
-import { AuthScreen } from './auth'
+import { PrivacyConsent } from './privacy-consent'
 import './notifications.css'
 
 type Tab = 'home' | 'chats' | 'friends' | 'profile'
@@ -105,6 +105,10 @@ export default function App() {
   const [user, setUser] = useState<TelegramUser | null>(null)
   const [authReady, setAuthReady] = useState(false)
   const [session, setSession] = useState<any>(null)
+  const [consentReady, setConsentReady] = useState(false)
+  const [hasConsent, setHasConsent] = useState(false)
+  const [consentLoading, setConsentLoading] = useState(false)
+  const [consentError, setConsentError] = useState('')
   const [balance, setBalance] = useState(250)
 
   const [notifications, setNotifications] = useState<Notification[]>([
@@ -139,24 +143,120 @@ export default function App() {
   useEffect(() => {
     initTelegramWebApp()
 
-    setUser(getTelegramUser())
+    const telegramUser = getTelegramUser()
+    setUser(telegramUser)
 
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
+    const prepareSession = async () => {
+      const { data } = await supabase.auth.getSession()
+      let currentSession = data.session
+
+      // Старую email-сессию больше не используем.
+      if (currentSession && !currentSession.user.is_anonymous) {
+        await supabase.auth.signOut()
+        currentSession = null
+      }
+
+      setSession(currentSession)
+
+      if (currentSession) {
+        const { data: consent } = await supabase
+          .from('privacy_consents')
+          .select('id')
+          .eq('user_id', currentSession.user.id)
+          .eq('policy_version', '1.0')
+          .maybeSingle()
+
+        setHasConsent(Boolean(consent))
+      }
+
+      setConsentReady(true)
       setAuthReady(true)
-    })
+    }
+
+    prepareSession()
 
     const {
       data: { subscription }
     } = supabase.auth.onAuthStateChange((_event, next) => {
       setSession(next)
-      setAuthReady(true)
+
+      if (!next) {
+        setHasConsent(false)
+      }
     })
 
     return () => {
       subscription.unsubscribe()
     }
   }, [])
+
+  const acceptPrivacy = async () => {
+    if (!user) return
+
+    setConsentLoading(true)
+    setConsentError('')
+
+    let currentSession = session
+
+    if (!currentSession) {
+      const { data, error } = await supabase.auth.signInAnonymously()
+
+      if (error) {
+        setConsentLoading(false)
+        setConsentError(
+          'Не удалось создать аккаунт: ' + error.message
+        )
+        return
+      }
+
+      currentSession = data.session
+      setSession(currentSession)
+    }
+
+    if (!currentSession) {
+      setConsentLoading(false)
+      setConsentError('Не удалось создать сессию NUR_CHAT.')
+      return
+    }
+
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .upsert({
+        id: currentSession.user.id,
+        telegram_id: user.id,
+        username: user.username ?? null,
+        first_name: user.first_name,
+        last_name: user.last_name ?? null,
+        photo_url: user.photo_url ?? null,
+      })
+
+    if (profileError) {
+      setConsentLoading(false)
+      setConsentError(
+        'Не удалось создать профиль: ' + profileError.message
+      )
+      return
+    }
+
+    const { error: consentError } = await supabase
+      .from('privacy_consents')
+      .insert({
+        user_id: currentSession.user.id,
+        telegram_id: user.id,
+        policy_version: '1.0',
+      })
+
+    if (consentError && consentError.code !== '23505') {
+      setConsentLoading(false)
+      setConsentError(
+        'Не удалось сохранить согласие: ' + consentError.message
+      )
+      return
+    }
+
+    setHasConsent(true)
+    setConsentLoading(false)
+  }
 
   /*
    * ВАЖНО:
@@ -174,7 +274,7 @@ export default function App() {
     [user]
   )
 
-  if (!authReady) {
+  if (!authReady || !consentReady) {
     return (
       <div className="auth-shell">
         <div className="auth-loading">
@@ -184,8 +284,15 @@ export default function App() {
     )
   }
 
-  if (!session) {
-    return <AuthScreen telegramUser={user} />
+  if (!user || !hasConsent || !session) {
+    return (
+      <PrivacyConsent
+        telegramUser={user}
+        loading={consentLoading}
+        error={consentError}
+        onAccept={acceptPrivacy}
+      />
+    )
   }
 
   const notify = (title: string, text: string) =>
@@ -393,9 +500,6 @@ export default function App() {
             friends={friends.length}
             onWallet={() => setModal('wallet')}
             onFriends={() => go('friends')}
-            onLogout={async () => {
-              await supabase.auth.signOut()
-            }}
           />
         )}
       </main>
@@ -657,8 +761,7 @@ function ProfilePage({
   balance,
   friends,
   onWallet,
-  onFriends,
-  onLogout
+  onFriends
 }: {
   user: TelegramUser | null
   name: string
@@ -666,7 +769,6 @@ function ProfilePage({
   friends: number
   onWallet: () => void
   onFriends: () => void
-  onLogout: () => void
 }) {
   const initials =
     name === 'Гость'
@@ -749,21 +851,6 @@ function ProfilePage({
           <ChevronRight size={17} />
         </button>
 
-        <button onClick={onLogout}>
-          <UserRound size={18} />
-
-          <div>
-            <strong>
-              Выйти из аккаунта
-            </strong>
-
-            <small>
-              Сбросить текущую Supabase-сессию
-            </small>
-          </div>
-
-          <ChevronRight size={17} />
-        </button>
       </div>
     </section>
   )
