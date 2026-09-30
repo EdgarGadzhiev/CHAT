@@ -15,6 +15,7 @@ type TelegramWebApp = {
   enableClosingConfirmation?: () => void
   disableClosingConfirmation?: () => void
   openLink?: (url: string) => void
+  HapticFeedback?: { impactOccurred: (s: string) => void; notificationOccurred: (s: string) => void }
   initData: string
   initDataUnsafe?: {
     user?: TelegramUser
@@ -53,4 +54,11 @@ export function initTelegramWebApp() {
   webApp.expand()
   webApp.setHeaderColor?.('#0b0d12')
   webApp.setBackgroundColor?.('#0b0d12')
+}
+
+export function haptic(kind: 'light' | 'success' | 'error') {
+  const h = getTelegramWebApp()?.HapticFeedback
+  if (!h) return
+  if (kind === 'light') h.impactOccurred('light')
+  else h.notificationOccurred(kind)
 }

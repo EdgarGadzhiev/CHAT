@@ -16,7 +16,7 @@ export function AdminScreen({ me }: { me: Me }) {
 
   return (
     <section className="page">
-      {!OPERATOR_READY && isAdmin && <div className="note warn">Заполните данные оператора в src/operator.ts — они подставляются в юридические документы.</div>}
+      {!OPERATOR_READY && isAdmin && <div className="note warn">Реквизиты оператора демонстрационные (src/operator.ts). Замените их на реальные до запуска.</div>}
       {stats && (
         <div className="stats">
           <div><b>{stats.users}</b><span>участников</span></div>

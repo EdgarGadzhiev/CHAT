@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowUp, CornerUpLeft, Flag, Image as ImageIcon, MoreHorizontal, Pin, Send, ShieldCheck, Sparkles, Trash2, X } from 'lucide-react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+import { ArrowUp, ChevronDown, CornerUpLeft, Flag, Image as ImageIcon, MoreHorizontal, Pin, Send, ShieldCheck, Sparkles, Trash2, X } from 'lucide-react'
 import { supabase } from './supabase'
 import { REACTIONS, fmtTime, prepareImage, rpc, signedUrls, uploadImage, type Me, type Msg } from './api'
 import { Avatar, Sheet, useAction, useToast } from './ui'
+import { haptic } from './telegram'
 import { PromoteSheet, ReportSheet, type ReportTarget } from './sheets'
 
 type Props = { me: Me; refreshMe: () => void; onOpenProfile: (id: string) => void }
@@ -22,6 +23,7 @@ export function ChatScreen({ me, refreshMe, onOpenProfile }: Props) {
   const [viewer, setViewer] = useState<string | null>(null)
   const [rules, setRules] = useState<string | null>(null)
   const [maxLen, setMaxLen] = useState(500)
+  const [showDown, setShowDown] = useState(false)
   const [text, setText] = useState('')
   const [image, setImage] = useState<{ blob: Blob; preview: string } | null>(null)
   const { run, busy } = useAction()
@@ -97,6 +99,7 @@ export function ChatScreen({ me, refreshMe, onOpenProfile }: Props) {
     if (ok) {
       setText(''); setImage(null); setReply(null)
       stick.current = true
+      haptic('success')
       load()
     }
   }
@@ -129,16 +132,28 @@ export function ChatScreen({ me, refreshMe, onOpenProfile }: Props) {
       <div className="messages" ref={scroller} onScroll={(e) => {
         const el = e.currentTarget
         stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120
+        setShowDown(!stick.current)
       }}>
         {hasMore && loaded && messages.length >= 60 && <button className="btn small center" disabled={busy} onClick={loadOlder}>Показать ранее</button>}
         {!loaded && <div className="empty">Загрузка…</div>}
         {loaded && messages.length === 0 && <div className="empty">Пока тихо. Напишите первым!</div>}
-        {messages.map((m) => (
-          <MessageView key={m.id} m={m} own={m.user_id === me.id} url={m.media_path ? urls[m.media_path] : undefined}
-            onMenu={() => setMenu(m)} onProfile={() => onOpenProfile(m.user_id)} onImage={(u) => setViewer(u)} />
-        ))}
+        {messages.map((m, i) => {
+          const prev = messages[i - 1]
+          const newDay = !prev || new Date(prev.created_at).toDateString() !== new Date(m.created_at).toDateString()
+          const compact = !newDay && prev.user_id === m.user_id && +new Date(m.created_at) - +new Date(prev.created_at) < 5 * 60000
+          return (
+            <Fragment key={m.id}>
+              {newDay && <div className="day"><span>{dayLabel(m.created_at)}</span></div>}
+              <MessageView m={m} own={m.user_id === me.id} compact={compact} url={m.media_path ? urls[m.media_path] : undefined}
+                onMenu={() => { haptic('light'); setMenu(m) }} onProfile={() => onOpenProfile(m.user_id)} onImage={(u) => setViewer(u)}
+                onReact={async (e) => { haptic('light'); await run(async () => { await rpc('toggle_reaction', { p_message: m.id, p_emoji: e }); return true }); load() }} />
+            </Fragment>
+          )
+        })}
         <div ref={bottomRef} />
       </div>
+
+      {showDown && <button className="down" onClick={() => { stick.current = true; bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }) }} aria-label="Вниз"><ChevronDown size={20} /></button>}
 
       <div className="composer-wrap">
         {reply && (
@@ -184,16 +199,24 @@ export function ChatScreen({ me, refreshMe, onOpenProfile }: Props) {
   )
 }
 
-function MessageView({ m, own, url, onMenu, onProfile, onImage }: {
-  m: Msg; own: boolean; url?: string; onMenu: () => void; onProfile: () => void; onImage: (u: string) => void
+const dayLabel = (iso: string) => {
+  const d = new Date(iso), t = new Date()
+  const diff = Math.round((+new Date(t.toDateString()) - +new Date(d.toDateString())) / 86400000)
+  if (diff === 0) return 'Сегодня'
+  if (diff === 1) return 'Вчера'
+  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })
+}
+
+function MessageView({ m, own, compact, url, onMenu, onProfile, onImage, onReact }: {
+  m: Msg; own: boolean; compact: boolean; url?: string; onMenu: () => void; onProfile: () => void; onImage: (u: string) => void; onReact: (e: string) => void
 }) {
   const gone = m.status !== 'visible'
   return (
-    <div id={'m' + m.id} className={'msg' + (own ? ' own' : '') + (m.highlighted ? ' hl' : '') + (m.boosted ? ' boosted' : '')}>
-      {!own && <button className="msg-avatar" onClick={onProfile}><Avatar name={m.author} url={m.author_photo} /></button>}
+    <div id={'m' + m.id} className={'msg' + (own ? ' own' : '') + (compact ? ' compact' : '') + (m.highlighted ? ' hl' : '') + (m.boosted ? ' boosted' : '')}>
+      {!own && (compact ? <span className="msg-avatar spacer" /> : <button className="msg-avatar" onClick={onProfile}><Avatar name={m.author} url={m.author_photo} /></button>)}
       <div className="bubble">
         <div className="meta">
-          <button className="author" onClick={onProfile}>{m.author}</button>
+          {!(compact || own) && <button className="author" onClick={onProfile}>{m.author}</button>}
           {m.author_role !== 'user' && <span className="badge">{m.author_role === 'admin' ? 'админ' : 'мод'}</span>}
           {m.pinned && <Pin size={11} />}
           {m.boosted && <span className="promo"><Sparkles size={11} /> продвигается</span>}
@@ -208,7 +231,7 @@ function MessageView({ m, own, url, onMenu, onProfile, onImage }: {
             {m.media_path && (url ? <img className="photo" src={url} alt="Фото" loading="lazy" onClick={() => onImage(url)} /> : <div className="photo ph" />)}
             {Object.keys(m.reactions).length > 0 && (
               <div className="reactions">
-                {Object.entries(m.reactions).map(([e, r]) => <span key={e} className={'chip' + (r.me ? ' on' : '')}>{e} {r.n}</span>)}
+                {Object.entries(m.reactions).map(([e, r]) => <button key={e} className={'chip' + (r.me ? ' on' : '')} onClick={() => onReact(e)}>{e} {r.n}</button>)}
               </div>
             )}
           </>

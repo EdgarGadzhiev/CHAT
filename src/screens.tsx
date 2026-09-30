@@ -4,14 +4,18 @@ import { rpc, errText, fmtDate } from './api'
 import { DocLinks } from './legal'
 
 export function Splash({ text = 'NUR_CHAT' }: { text?: string }) {
-  return <div className="center-screen"><div className="splash">{text}</div></div>
+  return (
+    <div className="center-screen">
+      <div className="splash"><img src="/nur-chat-logo.svg" alt="" /><span>{text}</span></div>
+    </div>
+  )
 }
 
 export function Notice({ title, text }: { title: string; text: string }) {
   return (
     <div className="center-screen">
       <div className="card narrow">
-        <div className="logo">N</div>
+        <img className="logo-img" src="/nur-chat-logo.svg" alt="" />
         <h1>{title}</h1>
         <p className="muted">{text}</p>
       </div>
@@ -57,7 +61,7 @@ export function Consent({ me, onDone }: { me: Me; onDone: () => void }) {
   return (
     <div className="center-screen">
       <div className="card">
-        <div className="logo">N</div>
+        <img className="logo-img" src="/nur-chat-logo.svg" alt="" />
         <span className="kicker">NUR_CHAT · Новый Уренгой</span>
         <h1>Добро пожаловать, {me.display_name}</h1>
         <p className="muted">
