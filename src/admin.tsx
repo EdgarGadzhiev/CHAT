@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from './supabase'
-import { REPORT_CATEGORIES, fmtDate, rpc, signedUrls, type Me } from './api'
+import { REPORT_CATEGORIES, fmtDate, removeMedia, rpc, signedUrls, type Me } from './api'
 import { OPERATOR_READY } from './operator'
 import { Empty, Sheet, useAction } from './ui'
 
 const catLabel = (k: string) => REPORT_CATEGORIES.find(([c]) => c === k)?.[1] ?? k
-const removeFile = async (path?: string | null) => { if (path) await supabase.storage.from('chat-media').remove([path]) }
+const removeFile = (path?: string | null) => removeMedia([path])
 
 export function AdminScreen({ me }: { me: Me }) {
   const isAdmin = me.role === 'admin'
-  const [tab, setTab] = useState<'reports' | 'users' | 'messages' | 'settings' | 'log'>('reports')
+  const [tab, setTab] = useState<'reports' | 'users' | 'messages' | 'settings' | 'system' | 'log'>('reports')
   const [stats, setStats] = useState<Record<string, number> | null>(null)
   const [user, setUser] = useState<string | null>(null)
   useEffect(() => { rpc<Record<string, number>>('admin_stats').then(setStats).catch(() => {}) }, [tab])
@@ -26,7 +26,7 @@ export function AdminScreen({ me }: { me: Me }) {
         </div>
       )}
       <div className="tabs">
-        {([['reports', 'Жалобы'], ['users', 'Люди'], ['messages', 'Чат'], ...(isAdmin ? [['settings', 'Настройки'], ['log', 'Журнал']] : [])] as [typeof tab, string][]).map(([k, l]) => (
+        {([['reports', 'Жалобы'], ['users', 'Люди'], ['messages', 'Чат'], ...(isAdmin ? [['settings', 'Настройки'], ['system', 'Система'], ['log', 'Журнал']] : [])] as [typeof tab, string][]).map(([k, l]) => (
           <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
@@ -34,6 +34,7 @@ export function AdminScreen({ me }: { me: Me }) {
       {tab === 'users' && <Users onUser={setUser} />}
       {tab === 'messages' && <Messages />}
       {tab === 'settings' && isAdmin && <Settings />}
+      {tab === 'system' && isAdmin && <System />}
       {tab === 'log' && isAdmin && <Log />}
       {user && <UserSheet id={user} me={me} onClose={() => setUser(null)} />}
     </section>
@@ -305,6 +306,8 @@ const SETTING_KEYS: [string, string, 'number' | 'bool'][] = [
   ['max_message_len', 'Макс. длина сообщения', 'number'],
   ['media_min_account_minutes', 'Фото разрешены через N минут после регистрации', 'number'],
   ['links_allowed', 'Разрешить ссылки (не рекомендуется)', 'bool'],
+  ['chat_retention_days', 'Хранить сообщения чата, дней (0 — бессрочно)', 'number'],
+  ['dm_retention_days', 'Хранить личные сообщения, дней (0 — бессрочно)', 'number'],
   ['dm_feature', 'Личные сообщения включены', 'bool'],
   ['dm_min_account_minutes', 'Личные сообщения: новому аккаунту через N минут', 'number'],
   ['chat_enabled', 'Чат включён', 'bool'],
@@ -372,7 +375,7 @@ function ClearChat() {
   const go = async () => {
     const r = await run(() => rpc<{ deleted: number; media: string[] }>('admin_clear_chat', { p_reason: reason }))
     if (!r) return
-    for (let i = 0; i < r.media.length; i += 100) await supabase.storage.from('chat-media').remove(r.media.slice(i, i + 100))
+    await removeMedia(r.media)
     setOpen(false); setReason(''); setWord('')
   }
   return (
@@ -389,5 +392,60 @@ function ClearChat() {
         </Sheet>
       )}
     </div>
+  )
+}
+
+// ───────── Система: нагрузка, размер БД, файлы ─────────
+type Health = {
+  db_size_mb: number; messages_est: number; messages_1h: number; dm_1h: number; writers_1h: number; users_total: number
+  storage_mb: number; storage_files: number; connections: number; max_connections: number; trash: number; rate_limit_rows: number
+}
+
+function System() {
+  const [h, setH] = useState<Health | null>(null)
+  const { run, busy } = useAction()
+  const load = useCallback(() => rpc<Health>('admin_health').then(setH).catch(() => setH(null)), [])
+  useEffect(() => { load() }, [load])
+
+  const cleanTrash = async () => {
+    await run(async () => {
+      for (let round = 0; round < 10; round++) {
+        const r = await rpc<{ total: number; paths: string[] }>('admin_media_trash', { p_limit: 200 })
+        if (!r.paths.length) break
+        await removeMedia(r.paths)
+        await rpc('admin_media_trash_done', { p_paths: r.paths })
+      }
+      return true
+    }, 'Очередь файлов очищена')
+    load()
+  }
+
+  if (!h) return <Empty text="Загрузка…" />
+  const conn = h.connections / h.max_connections
+  return (
+    <>
+      <div className="health">
+        <div><b>{h.users_total}</b><span>участников</span></div>
+        <div><b>{h.writers_1h}</b><span>писали за час</span></div>
+        <div><b>{h.messages_1h}</b><span>сообщений за час</span></div>
+        <div><b>{h.dm_1h}</b><span>личных за час</span></div>
+        <div><b>{h.db_size_mb} МБ</b><span>размер базы</span></div>
+        <div><b>{h.storage_mb} МБ</b><span>фото ({h.storage_files} файлов)</span></div>
+        <div>
+          <b>{h.connections} / {h.max_connections}</b><span>соединения с БД</span>
+          <div className="bar"><i className={conn > 0.75 ? 'hot' : ''} style={{ width: Math.min(100, conn * 100) + '%' }} /></div>
+        </div>
+        <div><b>~{h.messages_est.toLocaleString('ru-RU')}</b><span>сообщений в БД</span></div>
+      </div>
+      <p className="muted small">
+        Если соединения держатся выше 75% или база приближается к лимиту тарифа — пора повышать тариф/размер сервера (см. docs/SCALING.md).
+        Срок хранения сообщений настраивается во вкладке «Настройки».
+      </p>
+      <div className="card-row">
+        <b>Очередь удаления файлов: {h.trash}</b>
+        <span className="muted small">Сюда попадают фото старых сообщений (если включён срок хранения) — их нужно удалить из хранилища.</span>
+        <button className="btn" disabled={busy || h.trash === 0} onClick={cleanTrash}>Удалить файлы из очереди</button>
+      </div>
+    </>
   )
 }

@@ -4,10 +4,10 @@ const ago = (min: number) => new Date(now - min * 60000).toISOString()
 
 const me = {
   id: 'me', display_name: 'Эдгар', bio: 'Люблю Новый Уренгой и северное сияние', show_photo: false, photo_url: null, role: 'admin',
-  status: 'active', ban_reason: null, banned_until: null, muted_until: null, balance: 1250, consent_ok: true, policy_version: '2.1', created_at: ago(60 * 24 * 30), dm_enabled: true, dm_feature: true,
+  status: 'active', ban_reason: null, banned_until: null, muted_until: null, balance: 1250, consent_ok: true, policy_version: '2.1', created_at: ago(60 * 24 * 30), dm_enabled: true, dm_feature: true, notif_unread: 1, dm_unread: 3,
 }
 const msg = (id: number, user: string, author: string, body: string, min: number, extra: Record<string, unknown> = {}) => ({
-  id, user_id: user, status: 'visible', created_at: ago(min), body, media_path: null, reply_to: null, pinned: false, boosted: false, highlighted: false,
+  id, v: 0, user_id: user, status: 'visible', created_at: ago(min), body, media_path: null, thumb: false, boost_until: null, highlight_until: null, reply_to: null, pinned: false, boosted: false, highlighted: false,
   author, author_photo: null, author_role: 'user', reply: null, reactions: {}, ...extra,
 })
 const messages = [
@@ -15,7 +15,7 @@ const messages = [
   msg(2, 'u2', 'Fyntik', 'Погода огонь, минус 12 всего', 60 * 3),
   msg(3, 'u2', 'Fyntik', 'Иду гулять с собакой', 60 * 3 - 1),
   msg(4, 'me', 'Эдгар', 'Я тоже подтянусь через час 👍', 120, { reactions: { '👍': { n: 3, me: true }, '🔥': { n: 1, me: false } } }),
-  msg(5, 'u3', 'Эмир', 'Ищу попутчиков до Тарко-Сале в выходные', 40, { boosted: true, highlighted: true }),
+  msg(5, 'u3', 'Эмир', 'Ищу попутчиков до Тарко-Сале в выходные', 40, { boosted: true, highlighted: true, boost_until: new Date(now + 3600_000).toISOString(), highlight_until: new Date(now + 3600_000).toISOString() }),
   msg(6, 'u1', 'Александр', 'Кинотеатр сегодня работает?', 12, { reply: { id: 2, author: 'Fyntik', body: 'Погода огонь, минус 12 всего' } }),
   { ...msg(7, 'u4', 'Модератор', '', 5), status: 'deleted' },
   msg(8, 'me', 'Эдгар', 'Правила чата — в шапке, соблюдаем уважение', 2, { pinned: true, author_role: 'admin' }),
@@ -31,6 +31,10 @@ const tables: Record<string, unknown[]> = {
 
 function rpc(fn: string): unknown {
   switch (fn) {
+    case 'get_feed': return { messages, top: messages.filter((m) => m.pinned || m.boosted) }
+    case 'feed_sync': return { now: new Date().toISOString(), new: [], changed: [], gone: [], top_ids: messages.filter((m) => m.pinned || m.boosted).map((m) => m.id), top_extra: [] }
+    case 'toggle_reaction': return { '👍': { n: 4, me: true } }
+    case 'admin_health': return { db_size_mb: 14.2, messages_est: 120345, messages_1h: 240, dm_1h: 32, writers_1h: 58, users_total: 1280, storage_mb: 212.5, storage_files: 1800, connections: 18, max_connections: 60, trash: 12, rate_limit_rows: 400 }
     case 'get_me': return me
     case 'get_messages': return messages
     case 'get_top_messages': return messages.filter((m) => m.pinned || m.boosted)
@@ -72,7 +76,7 @@ function builder(table: string) {
 
 export function createMockClient() {
   const session = { user: { id: 'me', email: 'tg1@telegram.nurchat.internal' } }
-  const ch = { on: () => ch, subscribe: () => ch }
+  const ch: any = { on: () => ch, subscribe: (cb?: (s: string) => void) => { setTimeout(() => cb?.('SUBSCRIBED'), 50); return ch } }
   return {
     auth: {
       getSession: async () => ({ data: { session } }),

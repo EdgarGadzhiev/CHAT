@@ -17,19 +17,25 @@ export type Me = {
   created_at: string
   dm_enabled: boolean
   dm_feature: boolean
+  notif_unread: number
+  dm_unread: number
 }
 
 export type Msg = {
   id: number
+  v: number
   user_id: string
   status: 'visible' | 'hidden' | 'deleted'
   created_at: string
   body: string
   media_path: string | null
+  thumb: boolean
   reply_to: number | null
   pinned: boolean
   boosted: boolean
   highlighted: boolean
+  boost_until: string | null
+  highlight_until: string | null
   author: string
   author_photo: string | null
   author_role: string
@@ -50,8 +56,10 @@ export type DmThread = {
   blocked_by_me: boolean; can_send: boolean; other_read_id: number; messages: DmMsg[]
 }
 
-/** Шина событий личных сообщений: 'ping' — пришло с сервера, 'local' — изменили мы сами. */
+/** Шина событий: 'ping' — сигнал о ЛС с сервера, 'local' — изменили мы сами. */
 export const dmBus = new EventTarget()
+/** Состояние приватного realtime-канала личных сообщений (если не подключён — опрашиваем чаще). */
+export const dmState = { live: false }
 export type Gift = { id: number; title: string; emoji: string; price: number; enabled: boolean; sort: number }
 export type PromoOption = { id: number; kind: 'top' | 'highlight'; title: string; price: number; duration_minutes: number; enabled: boolean }
 export type Pack = { id: number; nc_amount: number; price_kop: number; enabled: boolean }
@@ -77,6 +85,7 @@ const ERRORS: Record<string, string> = {
   muted: 'Вам временно запрещено писать в чат.',
   banned: 'Аккаунт заблокирован.',
   too_long: 'Сообщение слишком длинное.',
+  too_many_lines: 'Слишком много строк в сообщении.',
   empty: 'Введите сообщение.',
   chat_disabled: 'Чат временно отключён.',
   insufficient_funds: 'Недостаточно Nurcoin.',
@@ -86,6 +95,7 @@ const ERRORS: Record<string, string> = {
   self_gift: 'Нельзя подарить подарок себе.',
   media_too_early: 'Фото можно отправлять через несколько минут после регистрации.',
   bad_media: 'Не удалось прикрепить фото.',
+  bad_image_type: 'Поддерживаются фото JPEG, PNG и WebP.',
   bad_reply: 'Исходное сообщение недоступно.',
   not_found: 'Не найдено.',
   option_unavailable: 'Этот вариант сейчас недоступен.',
@@ -113,12 +123,30 @@ export function errText(e: unknown): string {
   const m = e instanceof Error ? e.message : String(e)
   if (ERRORS[m]) return ERRORS[m]
   if (m.startsWith('blocked:')) return 'Сообщение нарушает правила чата.'
+  if (/Failed to fetch|NetworkError|Load failed|network/i.test(m)) return 'Нет соединения с сервером. Проверьте интернет.'
   return 'Не удалось выполнить действие. Попробуйте ещё раз.'
 }
 
-export async function rpc<T = unknown>(fn: string, args?: Record<string, unknown>): Promise<T> {
+const isAuthError = (e: { code?: string; message: string }) =>
+  e.code === 'PGRST301' || e.code === 'PGRST303' || /JWT|not_authenticated/i.test(e.message)
+
+/**
+ * Вызов серверной функции. Если сессия истекла — один раз тихо входим заново (через Telegram) и повторяем.
+ * Если аккаунт заблокирован или нужно новое согласие — просим приложение обновить состояние.
+ */
+export async function rpc<T = unknown>(fn: string, args?: Record<string, unknown>, retried = false): Promise<T> {
   const { data, error } = await supabase.rpc(fn, args)
-  if (error) throw new Error(error.message)
+  if (error) {
+    if (!retried && isAuthError(error)) {
+      try {
+        const { reauth } = await import('./auth')
+        await reauth()
+        return rpc<T>(fn, args, true)
+      } catch { /* падаем ниже с исходной ошибкой */ }
+    }
+    if (error.message === 'banned' || error.message === 'consent_required') window.dispatchEvent(new Event('nur:refresh-me'))
+    throw new Error(error.message)
+  }
   return data as T
 }
 
@@ -135,13 +163,17 @@ export async function callFunction<T = any>(name: string, body?: Record<string, 
   return data as T
 }
 
+// ───────── фото ─────────
 const urlCache = new Map<string, { url: string; exp: number }>()
+
+/** Подписанные ссылки на файлы (кэш в памяти на ~55 минут, не больше 600 записей). */
 export async function signedUrls(paths: string[]): Promise<Record<string, string>> {
   const now = Date.now()
-  const need = paths.filter((p) => !((urlCache.get(p)?.exp ?? 0) > now))
+  const need = [...new Set(paths)].filter((p) => !((urlCache.get(p)?.exp ?? 0) > now))
   if (need.length) {
     const { data } = await supabase.storage.from('chat-media').createSignedUrls(need, 3600)
     for (const r of data ?? []) if (r.path && r.signedUrl) urlCache.set(r.path, { url: r.signedUrl, exp: now + 3300_000 })
+    while (urlCache.size > 600) urlCache.delete(urlCache.keys().next().value as string)
   }
   const out: Record<string, string> = {}
   for (const p of paths) {
@@ -151,23 +183,48 @@ export async function signedUrls(paths: string[]): Promise<Record<string, string
   return out
 }
 
-/** Перекодирует фото в JPEG ≤1280px: уменьшает размер и удаляет EXIF (в т.ч. геолокацию). */
-export async function prepareImage(file: File): Promise<Blob> {
-  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error('bad_image_type')
-  const bmp = await createImageBitmap(file)
-  const scale = Math.min(1, 1280 / Math.max(bmp.width, bmp.height))
+/** Путь миниатюры для файла фото (миниатюра лежит рядом: uuid_t.jpg). */
+export const thumbPath = (p: string) => p.replace(/\.jpg$/, '_t.jpg')
+
+async function toJpeg(bmp: ImageBitmap, max: number, quality: number): Promise<Blob> {
+  const scale = Math.min(1, max / Math.max(bmp.width, bmp.height))
   const canvas = document.createElement('canvas')
-  canvas.width = Math.round(bmp.width * scale)
-  canvas.height = Math.round(bmp.height * scale)
+  canvas.width = Math.max(1, Math.round(bmp.width * scale))
+  canvas.height = Math.max(1, Math.round(bmp.height * scale))
   canvas.getContext('2d')!.drawImage(bmp, 0, 0, canvas.width, canvas.height)
-  return await new Promise((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('bad_image'))), 'image/jpeg', 0.82))
+  return await new Promise((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('bad_image'))), 'image/jpeg', quality))
 }
 
-export async function uploadImage(userId: string, blob: Blob): Promise<string> {
+/**
+ * Перекодирует фото: полный размер ≤1280px (~150–400 КБ) и миниатюра ≤360px (~15–30 КБ) — лента грузит только миниатюры.
+ * Перекодирование заодно удаляет EXIF (в том числе геолокацию).
+ */
+export async function prepareImage(file: File): Promise<{ full: Blob; thumb: Blob }> {
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error('bad_image_type')
+  if (file.size > 25 * 1024 * 1024) throw new Error('bad_image_type')
+  const bmp = await createImageBitmap(file)
+  try {
+    const [full, thumb] = await Promise.all([toJpeg(bmp, 1280, 0.8), toJpeg(bmp, 360, 0.72)])
+    return { full, thumb }
+  } finally {
+    bmp.close?.()
+  }
+}
+
+export async function uploadImage(userId: string, img: { full: Blob; thumb: Blob }): Promise<string> {
   const path = `${userId}/${crypto.randomUUID()}.jpg`
-  const { error } = await supabase.storage.from('chat-media').upload(path, blob, { contentType: 'image/jpeg', upsert: false })
-  if (error) throw new Error('bad_media')
+  const opts = { contentType: 'image/jpeg', upsert: false, cacheControl: '31536000' }
+  const bucket = supabase.storage.from('chat-media')
+  const [a, b] = await Promise.all([bucket.upload(path, img.full, opts), bucket.upload(thumbPath(path), img.thumb, opts)])
+  if (a.error) throw new Error('bad_media')
+  if (b.error) { /* миниатюра необязательна: лента покажет полный файл */ }
   return path
+}
+
+/** Удаляет файлы фото вместе с миниатюрами (ошибки не критичны). */
+export async function removeMedia(paths: (string | null | undefined)[]) {
+  const list = paths.filter((p): p is string => !!p).flatMap((p) => [p, thumbPath(p)])
+  for (let i = 0; i < list.length; i += 100) await supabase.storage.from('chat-media').remove(list.slice(i, i + 100)).catch(() => {})
 }
 
 export const fmtTime = (iso: string) =>

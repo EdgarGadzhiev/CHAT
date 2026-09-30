@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Bell, MessageCircle, ShieldAlert, UserRound, Users, Wallet } from 'lucide-react'
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
+import { Bell, MessageCircle, ShieldAlert, UserRound, Users, Wallet, WifiOff } from 'lucide-react'
 import { supabase } from './supabase'
-import { callFunction, dmBus, rpc, type Me, type Peer } from './api'
+import { dmBus, dmState, rpc, type Me, type Peer } from './api'
+import { authenticate } from './auth'
 import { getTelegramUser, getTelegramWebApp, initTelegramWebApp } from './telegram'
 import { Blocked, Consent, Notice, Splash } from './screens'
 import { ChatScreen } from './chat'
@@ -9,16 +10,15 @@ import { WalletScreen } from './wallet'
 import { MembersScreen, NotificationsSheet, ProfileScreen } from './people'
 import { ProfileSheet } from './sheets'
 import { DmScreen } from './dm'
-import { AdminScreen } from './admin'
+import { Skeleton } from './ui'
+
+// Панель модерации нужна единицам — не грузим её обычным пользователям
+const AdminScreen = lazy(() => import('./admin').then((m) => ({ default: m.AdminScreen })))
 
 type Tab = 'chat' | 'members' | 'wallet' | 'profile' | 'admin'
 type Phase = 'loading' | 'no-telegram' | 'unavailable' | 'ready'
 
-async function authenticate(initData: string) {
-  const r = await callFunction<{ token_hash: string; type: 'magiclink' }>('tg-auth', { initData })
-  const { error } = await supabase.auth.verifyOtp({ token_hash: r.token_hash, type: r.type })
-  if (error) throw error
-}
+const ME_POLL_MS = 60_000
 
 export default function App() {
   const [phase, setPhase] = useState<Phase>('loading')
@@ -26,16 +26,12 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('chat')
   const [profileId, setProfileId] = useState<string | null>(null)
   const [notifOpen, setNotifOpen] = useState(false)
-  const [unread, setUnread] = useState(0)
   const [dm, setDm] = useState<Peer | null>(null)
   const [dmUnread, setDmUnread] = useState(0)
+  const [online, setOnline] = useState(navigator.onLine)
 
   const refreshMe = useCallback(() => {
-    rpc<Me | null>('get_me').then((m) => m && setMe(m)).catch(() => {})
-  }, [])
-
-  const refreshUnread = useCallback(() => {
-    supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('read', false).then(({ count }) => setUnread(count ?? 0))
+    rpc<Me | null>('get_me').then((m) => { if (m) { setMe(m); setDmUnread(m.dm_unread ?? 0) } }).catch(() => {})
   }, [])
 
   const refreshDmUnread = useCallback(() => {
@@ -62,6 +58,7 @@ export default function App() {
         }
         if (!m) throw new Error('no_profile')
         setMe(m)
+        setDmUnread(m.dm_unread ?? 0)
         setPhase('ready')
       } catch {
         setPhase('unavailable')
@@ -70,13 +67,29 @@ export default function App() {
     boot()
   }, [])
 
+  // один опрос профиля раз в минуту (баланс, блокировка, счётчики) — с разбросом, чтобы клиенты не «били» сервер одновременно
   useEffect(() => {
     if (phase !== 'ready') return
-    refreshUnread()
-    refreshDmUnread()
-    const iv = setInterval(() => { refreshMe(); refreshUnread(); refreshDmUnread() }, 60000)
-    return () => clearInterval(iv)
-  }, [phase, refreshMe, refreshUnread, refreshDmUnread])
+    let timer: number
+    const loop = () => {
+      timer = window.setTimeout(() => { if (!document.hidden) refreshMe(); loop() }, ME_POLL_MS * (0.75 + Math.random() * 0.5))
+    }
+    loop()
+    const wake = () => { if (!document.hidden) refreshMe() }
+    document.addEventListener('visibilitychange', wake)
+    window.addEventListener('nur:refresh-me', refreshMe)
+    return () => {
+      window.clearTimeout(timer)
+      document.removeEventListener('visibilitychange', wake)
+      window.removeEventListener('nur:refresh-me', refreshMe)
+    }
+  }, [phase, refreshMe])
+
+  useEffect(() => {
+    const on = () => setOnline(true), off = () => setOnline(false)
+    window.addEventListener('online', on); window.addEventListener('offline', off)
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
+  }, [])
 
   // Личные сообщения: приватный канал «dm:<id>» присылает только сигнал «что-то пришло» (без текста)
   const myId = me?.id
@@ -86,7 +99,7 @@ export default function App() {
     const ch = supabase
       .channel('dm:' + myId, { config: { private: true } })
       .on('broadcast', { event: 'ping' }, () => { dmBus.dispatchEvent(new Event('ping')); refreshDmUnread() })
-      .subscribe()
+      .subscribe((status) => { dmState.live = status === 'SUBSCRIBED' })
     const onLocal = () => refreshDmUnread()
     dmBus.addEventListener('local', onLocal)
     return () => { supabase.removeChannel(ch); dmBus.removeEventListener('local', onLocal) }
@@ -94,7 +107,18 @@ export default function App() {
 
   if (phase === 'loading') return <Splash />
   if (phase === 'no-telegram') return <Notice title="Откройте NUR_CHAT в Telegram" text="Вход выполняется через ваш аккаунт Telegram. Откройте приложение через бота." />
-  if (phase === 'unavailable' || !me) return <Notice title="Сервис временно недоступен" text="Не удалось выполнить вход. Закройте приложение и откройте снова через несколько минут." />
+  if (phase === 'unavailable' || !me) {
+    return (
+      <div className="center-screen">
+        <div className="card narrow">
+          <img className="logo-img" src="/nur-chat-logo.svg" alt="" />
+          <h1>Сервис временно недоступен</h1>
+          <p className="muted">Не удалось выполнить вход. Проверьте интернет и попробуйте ещё раз.</p>
+          <button className="btn primary block" onClick={() => location.reload()}>Повторить</button>
+        </div>
+      </div>
+    )
+  }
   if (me.status === 'banned') return <Blocked me={me} />
   if (!me.consent_ok) return <Consent me={me} onDone={refreshMe} />
 
@@ -103,6 +127,7 @@ export default function App() {
     ['chat', 'Чат', MessageCircle], ['members', 'Люди', Users], ['wallet', 'Nurcoin', Wallet], ['profile', 'Профиль', UserRound],
     ...(staff ? [['admin', 'Модерация', ShieldAlert] as [Tab, string, typeof MessageCircle]] : []),
   ]
+  const unread = me.notif_unread ?? 0
 
   return (
     <div className="app">
@@ -116,17 +141,27 @@ export default function App() {
         </div>
       </header>
 
-      <main key={tab} className={'content fade' + (tab === 'chat' ? ' full' : '')}>
-        {tab === 'chat' && <ChatScreen me={me} refreshMe={refreshMe} onOpenProfile={setProfileId} />}
-        {tab === 'members' && <MembersScreen me={me} dmUnread={dmUnread} onOpenProfile={setProfileId} onOpenDm={setDm} />}
-        {tab === 'wallet' && <WalletScreen me={me} refreshMe={refreshMe} />}
-        {tab === 'profile' && <ProfileScreen me={me} refreshMe={refreshMe} />}
-        {tab === 'admin' && staff && <AdminScreen me={me} />}
-      </main>
+      {!online && <div className="offline-bar"><WifiOff size={14} /> Нет соединения — переподключаемся…</div>}
+
+      {/* Чат остаётся в памяти при переключении вкладок: не теряется позиция и не перезапрашивается лента */}
+      <div className={'chat-pane' + (tab === 'chat' ? '' : ' off')}>
+        <ChatScreen me={me} active={tab === 'chat'} refreshMe={refreshMe} onOpenProfile={setProfileId} />
+      </div>
+
+      {tab !== 'chat' && (
+        <main key={tab} className="content fade">
+          {tab === 'members' && <MembersScreen me={me} dmUnread={dmUnread} onOpenProfile={setProfileId} onOpenDm={setDm} />}
+          {tab === 'wallet' && <WalletScreen me={me} refreshMe={refreshMe} />}
+          {tab === 'profile' && <ProfileScreen me={me} refreshMe={refreshMe} />}
+          {tab === 'admin' && staff && (
+            <Suspense fallback={<Skeleton rows={4} height={70} />}><AdminScreen me={me} /></Suspense>
+          )}
+        </main>
+      )}
 
       <nav className="bottom-nav">
         {tabs.map(([k, label, Icon]) => (
-          <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>
+          <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)} aria-current={tab === k ? 'page' : undefined}>
             <span className="nav-ico"><Icon size={20} />{k === 'members' && dmUnread > 0 && <i className="nav-badge">{dmUnread > 9 ? '9+' : dmUnread}</i>}</span><span>{label}</span>
           </button>
         ))}
@@ -137,7 +172,7 @@ export default function App() {
         <ProfileSheet userId={profileId} me={me} onClose={() => setProfileId(null)} onSpent={refreshMe}
           onMessage={(p) => { setProfileId(null); setDm(p) }} />
       )}
-      {notifOpen && <NotificationsSheet onClose={() => { setNotifOpen(false); refreshUnread() }} onRead={() => setUnread(0)} />}
+      {notifOpen && <NotificationsSheet onClose={() => { setNotifOpen(false); refreshMe() }} onRead={refreshMe} />}
     </div>
   )
 }

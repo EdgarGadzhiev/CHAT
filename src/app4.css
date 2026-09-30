@@ -1,0 +1,55 @@
+/* ───── v4: производительность, устойчивость, доступность ───── */
+
+/* чат живёт вне <main>, чтобы не терять состояние при переключении вкладок */
+.chat-pane{flex:none;display:flex;flex-direction:column;overflow:hidden;width:min(100%,720px);margin:0 auto;
+  height:calc(100dvh - var(--top));padding-bottom:calc(var(--nav) + 16px + env(safe-area-inset-bottom))}
+.chat-pane.off{display:none}
+
+.offline-bar{display:flex;align-items:center;justify-content:center;gap:8px;padding:7px 12px;font-size:12.5px;font-weight:600;color:#1b1300;background:var(--gold);position:sticky;top:var(--top);z-index:19}
+
+.live-dot{width:8px;height:8px;border-radius:50%;background:var(--gold);margin-left:auto;margin-right:6px;flex:none;box-shadow:0 0 0 3px rgba(245,192,74,.2)}
+.live-dot.on{background:var(--ok);box-shadow:0 0 0 3px rgba(62,207,142,.2)}
+.chat-bar .link{margin-left:0}
+
+/* поле ввода, растущее по мере набора */
+.composer{align-items:flex-end}
+.composer .autota{flex:1;min-height:44px;max-height:132px;resize:none;padding:11px 16px;border-radius:22px;background:#171b26;border:1px solid var(--line);outline:none;font-size:15px;line-height:1.35;overflow-y:auto;scrollbar-width:none}
+.composer .autota:focus{border-color:var(--accent)}
+.composer .autota::-webkit-scrollbar{display:none}
+.composer .icon-btn,.composer .send{flex:none;align-self:flex-end}
+.composer .icon-btn{width:44px;height:44px}
+.send{width:44px;height:44px}
+
+/* сообщения */
+.bubble p{white-space:pre-wrap}
+.bubble{position:relative}
+.photo{background:var(--panel2);min-width:120px;min-height:80px;cursor:zoom-in}
+.photo.ph{width:200px;height:140px;animation:shimmer 1.4s infinite;background:linear-gradient(90deg,rgba(255,255,255,.04),rgba(255,255,255,.09),rgba(255,255,255,.04));background-size:200% 100%}
+.heart-burst{position:absolute;left:50%;top:50%;font-size:42px;pointer-events:none;transform:translate(-50%,-50%);animation:burst .7s ease-out forwards;z-index:3}
+@keyframes burst{0%{opacity:0;transform:translate(-50%,-50%) scale(.3)}25%{opacity:1;transform:translate(-50%,-60%) scale(1.15)}100%{opacity:0;transform:translate(-50%,-110%) scale(1)}}
+
+/* кнопка «вниз» со счётчиком новых сообщений */
+.down{position:absolute;right:14px;bottom:calc(84px)}
+.down-badge{position:absolute;top:-7px;right:-4px;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-size:11px;font-weight:800;font-style:normal;display:grid;place-items:center;box-shadow:0 0 0 2px var(--bg)}
+
+/* просмотр фото */
+.viewer{flex-direction:column}
+.viewer img{max-width:100%;max-height:100%;object-fit:contain;transition:filter .25s}
+.viewer img.blur{filter:blur(6px)}
+.viewer-close{position:absolute;top:calc(12px + env(safe-area-inset-top));right:12px;background:rgba(0,0,0,.5)}
+
+/* доступность */
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button:focus:not(:focus-visible){outline:none}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
+}
+
+/* система (админ) */
+.health{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.health>div{padding:12px;border-radius:16px;background:var(--glass);border:1px solid rgba(255,255,255,.07)}
+.health b{display:block;font-size:20px;letter-spacing:-.01em}
+.health span{font-size:11.5px;color:var(--muted)}
+.health .bar{height:6px;border-radius:3px;background:rgba(255,255,255,.08);margin-top:8px;overflow:hidden}
+.health .bar i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,var(--ok),var(--gold));}
+.health .bar i.hot{background:var(--danger)}

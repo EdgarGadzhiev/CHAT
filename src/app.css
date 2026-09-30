@@ -1,5 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
-:root{font-family:'Manrope',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color-scheme:dark;
+:root{font-family:'Manrope Variable','Manrope',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color-scheme:dark;
 --bg:#0b0d12;--panel:#151922;--panel2:#1c212c;--line:rgba(255,255,255,.08);--text:#f2f4fa;--muted:#8f96a6;--accent:#6c7cff;--accent2:#8a5cff;--danger:#ff5d6c;--ok:#3ecf8e;--gold:#f5c04a;
 --top:56px;--nav:64px}
 *{box-sizing:border-box}

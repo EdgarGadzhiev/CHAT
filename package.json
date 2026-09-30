@@ -10,11 +10,12 @@
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
+    "@fontsource-variable/manrope": "^5.3.0",
+    "@supabase/supabase-js": "latest",
     "@vitejs/plugin-react": "latest",
     "lucide-react": "latest",
     "react": "latest",
-    "react-dom": "latest",
-    "@supabase/supabase-js": "latest"
+    "react-dom": "latest"
   },
   "devDependencies": {
     "@types/react": "latest",

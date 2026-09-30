@@ -1,8 +1,8 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Ban, Check, CheckCheck, Flag, Lock, MessageCircle, MoreVertical, Send, Trash2, User } from 'lucide-react'
-import { dmBus, fmtTime, rpc, type Dialog, type DmMsg, type DmThread, type Me, type Peer } from './api'
+import { dmBus, dmState, fmtTime, rpc, type Dialog, type DmMsg, type DmThread, type Me, type Peer } from './api'
 import { haptic } from './telegram'
-import { Avatar, Empty, MenuRow, Sheet, Skeleton, useAction } from './ui'
+import { AutoTextarea, Avatar, Empty, MenuRow, Sheet, Skeleton, useAction } from './ui'
 import { ReportSheet, type ReportTarget } from './sheets'
 
 const notifyLocal = () => dmBus.dispatchEvent(new Event('local'))
@@ -83,9 +83,12 @@ export function DmScreen({ me, peer, onClose, onOpenProfile }: { me: Me; peer: P
 
   useEffect(() => {
     load()
-    const iv = window.setInterval(load, 6000)
+    // основной канал — realtime-сигнал; таймер — страховка (с разбросом, чтобы клиенты не били сервер одновременно)
+    let t: number
+    const loop = () => { t = window.setTimeout(() => { if (!document.hidden) load(); loop() }, (dmState.live ? 20000 : 6000) * (0.75 + Math.random() * 0.5)) }
+    loop()
     dmBus.addEventListener('ping', load)
-    return () => { window.clearInterval(iv); dmBus.removeEventListener('ping', load) }
+    return () => { window.clearTimeout(t); dmBus.removeEventListener('ping', load) }
   }, [load])
 
   const lastId = thread?.messages[thread.messages.length - 1]?.id
@@ -178,8 +181,7 @@ export function DmScreen({ me, peer, onClose, onOpenProfile }: { me: Me; peer: P
           <div className="muted-note">Вам запрещено писать до {new Date(me.muted_until!).toLocaleString('ru-RU')}</div>
         ) : (
           <div className="composer">
-            <input value={text} maxLength={500} placeholder="Сообщение…" onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && send()} />
+            <AutoTextarea value={text} onChange={setText} onSubmit={send} maxLength={500} placeholder="Сообщение…" />
             <button className="send" disabled={busy || !text.trim()} onClick={send} aria-label="Отправить"><Send size={18} /></button>
           </div>
         )}

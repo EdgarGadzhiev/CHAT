@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react'
+import { Component, createContext, useCallback, useContext, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { ChevronRight, X } from 'lucide-react'
 import { errText } from './api'
 
@@ -106,4 +106,47 @@ export function useAction() {
 
 export function Empty({ text, icon }: { text: string; icon?: ReactNode }) {
   return <div className="empty">{icon && <div className="empty-icon">{icon}</div>}{text}</div>
+}
+
+/** Поле ввода, которое растёт по мере набора (до ~5 строк). Enter отправляет, Shift+Enter — новая строка. */
+export function AutoTextarea({ value, onChange, onSubmit, placeholder, maxLength, disabled }: {
+  value: string; onChange: (v: string) => void; onSubmit: () => void; placeholder?: string; maxLength?: number; disabled?: boolean
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = Math.min(el.scrollHeight, 132) + 'px'
+  }, [value])
+  return (
+    <textarea
+      ref={ref} rows={1} className="autota" value={value} maxLength={maxLength} placeholder={placeholder} disabled={disabled}
+      enterKeyHint="send" aria-label={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); onSubmit() }
+      }}
+    />
+  )
+}
+
+/** Ловит неожиданные ошибки интерфейса, чтобы вместо белого экрана показать понятное сообщение. */
+export class ErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+  static getDerivedStateFromError() { return { failed: true } }
+  componentDidCatch(err: unknown) { console.error('UI error', err) }
+  render() {
+    if (!this.state.failed) return this.props.children
+    return (
+      <div className="center-screen">
+        <div className="card narrow">
+          <img className="logo-img" src="/nur-chat-logo.svg" alt="" />
+          <h1>Что-то пошло не так</h1>
+          <p className="muted">Приложение столкнулось с ошибкой. Перезагрузите его — данные не пострадали.</p>
+          <button className="btn primary block" onClick={() => location.reload()}>Перезагрузить</button>
+        </div>
+      </div>
+    )
+  }
 }
