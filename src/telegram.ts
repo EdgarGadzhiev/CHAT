@@ -14,6 +14,7 @@ type TelegramWebApp = {
   setBackgroundColor?: (color: string) => void
   enableClosingConfirmation?: () => void
   disableClosingConfirmation?: () => void
+  openLink?: (url: string) => void
   initData: string
   initDataUnsafe?: {
     user?: TelegramUser

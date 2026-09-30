@@ -1,0 +1,154 @@
+import { supabase } from './supabase'
+
+export type Me = {
+  id: string
+  display_name: string
+  bio: string
+  show_photo: boolean
+  photo_url: string | null
+  role: 'user' | 'moderator' | 'admin'
+  status: 'active' | 'banned' | 'deleted'
+  ban_reason: string | null
+  banned_until: string | null
+  muted_until: string | null
+  balance: number
+  consent_ok: boolean
+  policy_version: string
+}
+
+export type Msg = {
+  id: number
+  user_id: string
+  status: 'visible' | 'hidden' | 'deleted'
+  created_at: string
+  body: string
+  media_path: string | null
+  reply_to: number | null
+  pinned: boolean
+  boosted: boolean
+  highlighted: boolean
+  author: string
+  author_photo: string | null
+  author_role: string
+  reply: { id: number; author: string; body: string } | null
+  reactions: Record<string, { n: number; me: boolean }>
+}
+
+export type Member = { id: string; display_name: string; bio: string; role: string; photo_url: string | null }
+export type Gift = { id: number; title: string; emoji: string; price: number; enabled: boolean; sort: number }
+export type PromoOption = { id: number; kind: 'top' | 'highlight'; title: string; price: number; duration_minutes: number; enabled: boolean }
+export type Pack = { id: number; nc_amount: number; price_kop: number; enabled: boolean }
+
+export const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥']
+
+export const REPORT_CATEGORIES: [string, string][] = [
+  ['spam', 'Спам или реклама'],
+  ['insult', 'Оскорбления, травля, угрозы'],
+  ['illegal', 'Наркотики, запрещённые товары и услуги'],
+  ['extremism', 'Экстремизм, призывы к насилию'],
+  ['adult', 'Порнография и 18+'],
+  ['minors', 'Материалы с участием несовершеннолетних'],
+  ['personal_data', 'Публикация чужих персональных данных'],
+  ['fraud', 'Мошенничество'],
+  ['other', 'Другое'],
+]
+
+const ERRORS: Record<string, string> = {
+  rate_limited: 'Слишком часто. Подождите немного.',
+  slow_mode: 'Подождите пару секунд перед следующим сообщением.',
+  duplicate: 'Такое сообщение уже отправлено.',
+  muted: 'Вам временно запрещено писать в чат.',
+  banned: 'Аккаунт заблокирован.',
+  too_long: 'Сообщение слишком длинное.',
+  empty: 'Введите сообщение.',
+  chat_disabled: 'Чат временно отключён.',
+  insufficient_funds: 'Недостаточно Nurcoin.',
+  already_reported: 'Вы уже отправляли жалобу.',
+  report_blocked: 'Отправка жалоб для вас ограничена.',
+  self_report: 'Нельзя пожаловаться на себя.',
+  self_gift: 'Нельзя подарить подарок себе.',
+  media_too_early: 'Фото можно отправлять через несколько минут после регистрации.',
+  bad_media: 'Не удалось прикрепить фото.',
+  bad_reply: 'Исходное сообщение недоступно.',
+  not_found: 'Не найдено.',
+  option_unavailable: 'Этот вариант сейчас недоступен.',
+  forbidden: 'Недостаточно прав.',
+  reason_required: 'Укажите причину.',
+  payments_not_configured: 'Оплата пока не подключена.',
+  'blocked:links': 'Ссылки в чате запрещены.',
+  'blocked:email': 'Не публикуйте email-адреса.',
+  'blocked:contacts': 'Не публикуйте контакты (@username).',
+  'blocked:digits': 'Не публикуйте номера телефонов, карт и другие длинные числа.',
+  'blocked:word:profanity': 'Сообщение содержит недопустимую лексику.',
+  'blocked:word:adult': 'Сообщение нарушает правила чата (18+).',
+  'blocked:word:drugs': 'Сообщение нарушает правила чата (запрещённые вещества).',
+  'blocked:word:gambling': 'Сообщение нарушает правила чата (азартные игры).',
+  'blocked:word:fraud': 'Сообщение нарушает правила чата (мошенничество).',
+}
+
+export function errText(e: unknown): string {
+  const m = e instanceof Error ? e.message : String(e)
+  if (ERRORS[m]) return ERRORS[m]
+  if (m.startsWith('blocked:')) return 'Сообщение нарушает правила чата.'
+  return 'Не удалось выполнить действие. Попробуйте ещё раз.'
+}
+
+export async function rpc<T = unknown>(fn: string, args?: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.rpc(fn, args)
+  if (error) throw new Error(error.message)
+  return data as T
+}
+
+export async function callFunction<T = any>(name: string, body?: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.functions.invoke(name, { body })
+  if (error) {
+    let code = error.message
+    try {
+      const ctx = (error as any).context
+      if (ctx?.json) code = (await ctx.json()).error ?? code
+    } catch { /* ignore */ }
+    throw new Error(code)
+  }
+  return data as T
+}
+
+const urlCache = new Map<string, { url: string; exp: number }>()
+export async function signedUrls(paths: string[]): Promise<Record<string, string>> {
+  const now = Date.now()
+  const need = paths.filter((p) => !((urlCache.get(p)?.exp ?? 0) > now))
+  if (need.length) {
+    const { data } = await supabase.storage.from('chat-media').createSignedUrls(need, 3600)
+    for (const r of data ?? []) if (r.path && r.signedUrl) urlCache.set(r.path, { url: r.signedUrl, exp: now + 3300_000 })
+  }
+  const out: Record<string, string> = {}
+  for (const p of paths) {
+    const c = urlCache.get(p)
+    if (c) out[p] = c.url
+  }
+  return out
+}
+
+/** Перекодирует фото в JPEG ≤1280px: уменьшает размер и удаляет EXIF (в т.ч. геолокацию). */
+export async function prepareImage(file: File): Promise<Blob> {
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error('bad_image_type')
+  const bmp = await createImageBitmap(file)
+  const scale = Math.min(1, 1280 / Math.max(bmp.width, bmp.height))
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(bmp.width * scale)
+  canvas.height = Math.round(bmp.height * scale)
+  canvas.getContext('2d')!.drawImage(bmp, 0, 0, canvas.width, canvas.height)
+  return await new Promise((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('bad_image'))), 'image/jpeg', 0.82))
+}
+
+export async function uploadImage(userId: string, blob: Blob): Promise<string> {
+  const path = `${userId}/${crypto.randomUUID()}.jpg`
+  const { error } = await supabase.storage.from('chat-media').upload(path, blob, { contentType: 'image/jpeg', upsert: false })
+  if (error) throw new Error('bad_media')
+  return path
+}
+
+export const fmtTime = (iso: string) =>
+  new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+export const fmtDate = (iso: string) =>
+  new Date(iso).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+export const rub = (kop: number) => (kop / 100).toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ₽'
