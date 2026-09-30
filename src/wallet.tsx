@@ -63,9 +63,9 @@ export function WalletScreen({ me, refreshMe }: { me: Me; refreshMe: () => void 
         {!pricing ? <Skeleton rows={2} height={70} /> : (
           <>
             <div className="amount-row">
-              <button className="step-btn" onClick={() => change(amount - pricing.step * 5)} aria-label="Меньше"><Minus size={18} /></button>
+              <button className="step-btn" onClick={() => change(amount - pricing.step)} aria-label="Меньше"><Minus size={18} /></button>
               <div className="amount"><b>{amount.toLocaleString('ru-RU')}</b><span>NC</span></div>
-              <button className="step-btn" onClick={() => change(amount + pricing.step * 5)} aria-label="Больше"><Plus size={18} /></button>
+              <button className="step-btn" onClick={() => change(amount + pricing.step)} aria-label="Больше"><Plus size={18} /></button>
             </div>
             <input className="slider" type="range" min={pricing.min} max={pricing.max} step={pricing.step} value={amount}
               style={{ ['--pct' as string]: pct + '%' }} onChange={(e) => setAmount(Number(e.target.value))} aria-label="Количество Nurcoin" />

@@ -37,8 +37,8 @@ begin
      where (m.body <> '' or m.media_path is not null)
        and not exists (select 1 from message_archive x where x.message_id = m.id);
   select count(*) into n from messages;
-  delete from reactions;
-  delete from messages;
+  delete from reactions where true;
+  delete from messages where true;
   insert into mod_log(actor, action, reason, meta) values (a.id, 'clear_chat', rs, jsonb_build_object('messages', n));
   perform realtime.send('{}'::jsonb, 'ping', 'chat-city', false);
   return jsonb_build_object('deleted', n, 'media', paths);
