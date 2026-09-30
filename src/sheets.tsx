@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Flag, Gift as GiftIcon } from 'lucide-react'
 import { supabase } from './supabase'
 import { REPORT_CATEGORIES, rpc, type Gift, type Me, type Msg, type PromoOption } from './api'
-import { Avatar, Empty, Sheet, useAction } from './ui'
+import { Avatar, Empty, Sheet, Skeleton, useAction } from './ui'
 
 export type ReportTarget = { kind: 'message'; id: number; author: string } | { kind: 'user'; id: string; author: string }
 
@@ -52,7 +52,7 @@ export function GiftSheet({ toId, toName, me, onClose, onSpent }: { toId: string
   return (
     <Sheet title="Подарок" kicker={`Для: ${toName}`} onClose={onClose}>
       <div className="balance-line">Ваш баланс: <b>{me.balance} NC</b></div>
-      {!gifts ? <Empty text="Загрузка…" /> : gifts.length === 0 ? <Empty text="Подарки пока недоступны" /> : (
+      {!gifts ? <Skeleton rows={3} height={64} /> : gifts.length === 0 ? <Empty text="Подарки пока недоступны" /> : (
         <div className="grid-3">
           {gifts.map((g) => (
             <button key={g.id} className="tile" disabled={busy || me.balance < g.price} onClick={() => send(g)}>
@@ -85,7 +85,7 @@ export function PromoteSheet({ msg, me, onClose, onSpent }: { msg: Msg; me: Me; 
     <Sheet title="Продвинуть сообщение" kicker="Nurcoin" onClose={onClose}>
       <blockquote className="quote">{msg.body || 'Фото'}</blockquote>
       <div className="balance-line">Ваш баланс: <b>{me.balance} NC</b></div>
-      {!opts ? <Empty text="Загрузка…" /> : opts.length === 0 ? <Empty text="Продвижение пока недоступно" /> : (
+      {!opts ? <Skeleton rows={3} height={64} /> : opts.length === 0 ? <Empty text="Продвижение пока недоступно" /> : (
         <div className="list">
           {opts.map((o) => (
             <button key={o.id} className="row-btn" disabled={busy || me.balance < o.price} onClick={() => buy(o)}>
@@ -110,10 +110,10 @@ export function ProfileSheet({ userId, me, onClose, onSpent }: { userId: string;
   return (
     <>
       <Sheet title="Профиль" onClose={onClose}>
-        {p === undefined ? <Empty text="Загрузка…" /> : p === null ? <Empty text="Профиль недоступен" /> : (
+        {p === undefined ? <Skeleton rows={3} height={64} /> : p === null ? <Empty text="Профиль недоступен" /> : (
           <>
             <div className="profile-head">
-              <Avatar name={p.display_name} url={p.photo_url} size={72} />
+              <div className="hero-avatar"><Avatar name={p.display_name} url={p.photo_url} size={84} /></div>
               <h3>{p.display_name} {p.role !== 'user' && <span className="badge">{p.role === 'admin' ? 'админ' : 'модератор'}</span>}</h3>
               {p.bio && <p>{p.bio}</p>}
               <span className="muted small">В чате с {new Date(p.created_at).toLocaleDateString('ru-RU')} · сообщений: {p.messages}</span>

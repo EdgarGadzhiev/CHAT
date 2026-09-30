@@ -14,6 +14,7 @@ export type Me = {
   balance: number
   consent_ok: boolean
   policy_version: string
+  created_at: string
 }
 
 export type Msg = {

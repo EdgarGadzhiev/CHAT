@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Search } from 'lucide-react'
+import { Bell, FileText, Gift, Search, ShieldCheck, Trash2, Users } from 'lucide-react'
 import { supabase } from './supabase'
 import { callFunction, fmtDate, rpc, type Me, type Member } from './api'
-import { DocLinks } from './legal'
-import { Avatar, Empty, Sheet, useAction } from './ui'
+import { DocSheet } from './legal'
+import { Avatar, Empty, MenuRow, Sheet, Skeleton, Switch, useAction } from './ui'
 
 export function MembersScreen({ onOpenProfile }: { onOpenProfile: (id: string) => void }) {
   const [q, setQ] = useState('')
@@ -14,12 +14,17 @@ export function MembersScreen({ onOpenProfile }: { onOpenProfile: (id: string) =
   }, [q])
   return (
     <section className="page">
-      <div className="search"><Search size={16} /><input placeholder="Найти участника" value={q} maxLength={32} onChange={(e) => setQ(e.target.value)} /></div>
-      {!list ? <Empty text="Загрузка…" /> : list.length === 0 ? <Empty text="Никого не нашли" /> : (
-        <div className="list">
+      <div className="page-title"><h1>Участники</h1><span className="muted">Жители города в NUR_CHAT</span></div>
+      <div className="search"><Search size={17} /><input placeholder="Найти участника" value={q} maxLength={32} onChange={(e) => setQ(e.target.value)} /></div>
+      {!list ? <Skeleton rows={5} height={64} /> : list.length === 0 ? <Empty icon={<Users size={26} />} text="Никого не нашли" /> : (
+        <div className="group">
           {list.map((m) => (
-            <button key={m.id} className="row-btn" onClick={() => onOpenProfile(m.id)}>
-              <span className="who"><Avatar name={m.display_name} url={m.photo_url} /><span><b>{m.display_name}</b><small className="muted">{m.bio || '—'}</small></span></span>
+            <button key={m.id} className="member" onClick={() => onOpenProfile(m.id)}>
+              <Avatar name={m.display_name} url={m.photo_url} size={44} />
+              <span className="member-text">
+                <b>{m.display_name}{m.role !== 'user' && <span className="badge">{m.role === 'admin' ? 'админ' : 'мод'}</span>}</b>
+                <small>{m.bio || 'Пока ничего не рассказал(а) о себе'}</small>
+              </span>
             </button>
           ))}
         </div>
@@ -32,18 +37,15 @@ export function ProfileScreen({ me, refreshMe }: { me: Me; refreshMe: () => void
   const [name, setName] = useState(me.display_name)
   const [bio, setBio] = useState(me.bio)
   const [showPhoto, setShowPhoto] = useState(me.show_photo)
-  const [exportText, setExportText] = useState<string | null>(null)
+  const [doc, setDoc] = useState<string | null>(null)
   const [del, setDel] = useState(false)
   const [confirm, setConfirm] = useState('')
   const { run, busy } = useAction()
+  const dirty = name.trim() !== me.display_name || bio.trim() !== me.bio || showPhoto !== me.show_photo
 
   const save = async () => {
     const ok = await run(async () => { await rpc('update_profile', { p_display_name: name, p_bio: bio, p_show_photo: showPhoto }); return true }, 'Профиль сохранён')
     if (ok) refreshMe()
-  }
-  const exportData = async () => {
-    const d = await run(() => rpc('export_my_data'))
-    if (d) setExportText(JSON.stringify(d, null, 2))
   }
   const remove = async () => {
     const ok = await run(async () => { await callFunction('delete-account'); return true })
@@ -52,30 +54,35 @@ export function ProfileScreen({ me, refreshMe }: { me: Me; refreshMe: () => void
 
   return (
     <section className="page">
-      <div className="profile-head">
-        <Avatar name={name} url={showPhoto ? me.photo_url : null} size={80} />
-        <span className="muted small">Так вас видят другие участники</span>
-      </div>
-      <label className="field">Имя в чате<input className="input" value={name} maxLength={32} onChange={(e) => setName(e.target.value)} /></label>
-      <label className="field">О себе<textarea className="input" rows={3} maxLength={200} value={bio} onChange={(e) => setBio(e.target.value)} placeholder="Коротко о себе (без контактов и ссылок)" /></label>
-      <label className="check"><input type="checkbox" checked={showPhoto} onChange={(e) => setShowPhoto(e.target.checked)} /><span>Показывать фото из Telegram другим участникам</span></label>
-      <button className="btn primary block" disabled={busy || name.trim().length < 2} onClick={save}>Сохранить</button>
-
-      <h3>Документы</h3>
-      <div className="links"><DocLinks ids={[['policy', 'Политика обработки ПДн'], ['terms', 'Соглашение и правила'], ['offer', 'Оферта о Nurcoin']]} /></div>
-
-      <h3>Ваши данные</h3>
-      <div className="actions">
-        <button className="btn" disabled={busy} onClick={exportData}>Скачать мои данные</button>
-        <button className="btn danger" onClick={() => setDel(true)}>Удалить аккаунт</button>
+      <div className="hero">
+        <div className="hero-avatar"><Avatar name={name || me.display_name} url={showPhoto ? me.photo_url : null} size={88} /></div>
+        <h1>{me.display_name}</h1>
+        <span className="muted small">
+          {me.role !== 'user' && <span className="badge">{me.role === 'admin' ? 'администратор' : 'модератор'}</span>} в чате с {new Date(me.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
+        </span>
       </div>
 
-      {exportText && (
-        <Sheet title="Мои данные" kicker="Копия в формате JSON" onClose={() => setExportText(null)}>
-          <textarea className="input mono" rows={14} readOnly value={exportText} onFocus={(e) => e.currentTarget.select()} />
-          <button className="btn primary block" onClick={() => navigator.clipboard?.writeText(exportText)}>Скопировать</button>
-        </Sheet>
-      )}
+      <div className="panel">
+        <label className="field">Имя в чате<input className="input" value={name} maxLength={32} onChange={(e) => setName(e.target.value)} /></label>
+        <label className="field">О себе<textarea className="input" rows={3} maxLength={200} value={bio} onChange={(e) => setBio(e.target.value)} placeholder="Коротко о себе — без контактов и ссылок" /></label>
+        <div className="counter">{bio.length}/200</div>
+        <Switch checked={showPhoto} onChange={setShowPhoto} label="Показывать моё фото" hint="Фото из Telegram увидят другие участники" />
+        <button className="btn primary block" disabled={busy || !dirty || name.trim().length < 2} onClick={save}>Сохранить изменения</button>
+      </div>
+
+      <h3 className="section-title">Документы</h3>
+      <div className="group">
+        <MenuRow icon={<ShieldCheck size={19} />} title="Политика обработки данных" hint="Как мы храним и защищаем ваши данные" onClick={() => setDoc('policy')} />
+        <MenuRow icon={<FileText size={19} />} title="Соглашение и правила чата" hint="Что можно и нельзя публиковать" onClick={() => setDoc('terms')} />
+        <MenuRow icon={<Gift size={19} />} title="Оферта о Nurcoin" hint="Условия покупки и возврата" onClick={() => setDoc('offer')} />
+      </div>
+
+      <h3 className="section-title">Аккаунт</h3>
+      <div className="group">
+        <MenuRow icon={<Trash2 size={19} />} title="Удалить аккаунт" hint="Профиль, сообщения и фото будут удалены" danger onClick={() => setDel(true)} />
+      </div>
+
+      {doc && <DocSheet id={doc} onClose={() => setDoc(null)} />}
       {del && (
         <Sheet title="Удалить аккаунт" onClose={() => setDel(false)}>
           <p>Профиль будет обезличен, ваши сообщения и фото удалены, неиспользованные Nurcoin сгорят без возврата. Это необратимо.</p>
@@ -99,11 +106,11 @@ export function NotificationsSheet({ onClose, onRead }: { onClose: () => void; o
   }, [])
   return (
     <Sheet title="Уведомления" onClose={onClose}>
-      {!items ? <Empty text="Загрузка…" /> : items.length === 0 ? <Empty text="Пока ничего нет" /> : (
-        <div className="list">
+      {!items ? <Skeleton rows={3} height={64} /> : items.length === 0 ? <Empty icon={<Bell size={26} />} text="Пока ничего нет" /> : (
+        <div className="group">
           {items.map((n) => (
-            <div key={n.id} className={'row col' + (n.read ? '' : ' unread')}>
-              <b>{n.title}</b><span>{n.text}</span><small className="muted">{fmtDate(n.created_at)}</small>
+            <div key={n.id} className={'notif' + (n.read ? '' : ' unread')}>
+              <b>{n.title}</b><span>{n.text}</span><small>{fmtDate(n.created_at)}</small>
             </div>
           ))}
         </div>

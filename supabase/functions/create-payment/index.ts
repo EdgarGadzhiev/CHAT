@@ -23,15 +23,15 @@ Deno.serve(async (req) => {
   const { data: u } = await userClient.auth.getUser()
   if (!u?.user) return json({ error: 'unauthorized' }, 401)
 
-  let body: { pack_id?: number; email?: string } = {}
+  let body: { nc_amount?: number; email?: string } = {}
   try { body = await req.json() } catch { /* пусто */ }
-  if (!Number.isInteger(body.pack_id)) return json({ error: 'bad_request' }, 400)
+  if (!Number.isInteger(body.nc_amount)) return json({ error: 'bad_request' }, 400)
 
-  const { data: order, error } = await userClient.rpc('create_order', { p_pack: body.pack_id })
+  const { data: order, error } = await userClient.rpc("create_order", { p_nc: body.nc_amount })
   if (error || !order) return json({ error: error?.message ?? 'order_failed' }, 400)
 
   const value = (order.amount_kop / 100).toFixed(2)
-  const desc = `Пакет Nurcoin: ${order.nc_amount} NC`
+  const desc = `Nurcoin: ${order.nc_amount} NC`
   const payload: Record<string, unknown> = {
     amount: { value, currency: 'RUB' },
     capture: true,

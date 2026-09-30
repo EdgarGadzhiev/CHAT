@@ -1,8 +1,8 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowUp, ChevronDown, CornerUpLeft, Flag, Image as ImageIcon, MoreHorizontal, Pin, Send, ShieldCheck, Sparkles, Trash2, X } from 'lucide-react'
+import { ArrowUp, ChevronDown, MessageCircle, CornerUpLeft, Flag, Image as ImageIcon, MoreHorizontal, Pin, Send, ShieldCheck, Sparkles, Trash2, X } from 'lucide-react'
 import { supabase } from './supabase'
 import { REACTIONS, fmtTime, prepareImage, rpc, signedUrls, uploadImage, type Me, type Msg } from './api'
-import { Avatar, Sheet, useAction, useToast } from './ui'
+import { Avatar, Sheet, Skeleton, nameColor, useAction, useToast } from './ui'
 import { haptic } from './telegram'
 import { PromoteSheet, ReportSheet, type ReportTarget } from './sheets'
 
@@ -135,8 +135,8 @@ export function ChatScreen({ me, refreshMe, onOpenProfile }: Props) {
         setShowDown(!stick.current)
       }}>
         {hasMore && loaded && messages.length >= 60 && <button className="btn small center" disabled={busy} onClick={loadOlder}>Показать ранее</button>}
-        {!loaded && <div className="empty">Загрузка…</div>}
-        {loaded && messages.length === 0 && <div className="empty">Пока тихо. Напишите первым!</div>}
+        {!loaded && <Skeleton rows={5} height={56} />}
+        {loaded && messages.length === 0 && <div className="empty"><div className="empty-icon"><MessageCircle size={28} /></div>Пока тихо. Напишите первым!</div>}
         {messages.map((m, i) => {
           const prev = messages[i - 1]
           const newDay = !prev || new Date(prev.created_at).toDateString() !== new Date(m.created_at).toDateString()
@@ -216,7 +216,7 @@ function MessageView({ m, own, compact, url, onMenu, onProfile, onImage, onReact
       {!own && (compact ? <span className="msg-avatar spacer" /> : <button className="msg-avatar" onClick={onProfile}><Avatar name={m.author} url={m.author_photo} /></button>)}
       <div className="bubble">
         <div className="meta">
-          {!(compact || own) && <button className="author" onClick={onProfile}>{m.author}</button>}
+          {!(compact || own) && <button className="author" style={{ color: nameColor(m.author) }} onClick={onProfile}>{m.author}</button>}
           {m.author_role !== 'user' && <span className="badge">{m.author_role === 'admin' ? 'админ' : 'мод'}</span>}
           {m.pinned && <Pin size={11} />}
           {m.boosted && <span className="promo"><Sparkles size={11} /> продвигается</span>}

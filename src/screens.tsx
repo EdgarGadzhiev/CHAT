@@ -77,9 +77,9 @@ export function Consent({ me, onDone }: { me: Me; onDone: () => void }) {
         <label className="check"><input type="checkbox" checked={age} onChange={(e) => setAge(e.target.checked)} />
           <span>Мне исполнилось 18 лет</span></label>
         <label className="check"><input type="checkbox" checked={pd} onChange={(e) => setPd(e.target.checked)} />
-          <span>Я даю согласие на обработку персональных данных на условиях <DocLinks ids={[['policy', 'Политики обработки персональных данных']]} /></span></label>
+          <span>Я даю согласие на обработку персональных данных на условиях <DocLinks ids={[['policy', 'Политики обработки данных']]} /></span></label>
         <label className="check"><input type="checkbox" checked={terms} onChange={(e) => setTerms(e.target.checked)} />
-          <span>Я принимаю <DocLinks ids={[['terms', 'Пользовательское соглашение и правила чата']]} /> и <DocLinks ids={[['offer', 'оферту о Nurcoin']]} /></span></label>
+          <span>Я принимаю <DocLinks ids={[['terms', 'Соглашение и правила чата']]} /> и <DocLinks ids={[['offer', 'оферту Nurcoin']]} /></span></label>
 
         {err && <div className="error">{err}</div>}
         <button className="btn primary block" disabled={!(age && pd && terms) || busy} onClick={submit}>

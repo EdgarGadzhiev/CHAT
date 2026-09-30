@@ -87,14 +87,14 @@ export default function App() {
       <header className="topbar">
         <div className="brand"><img src="/nur-chat-logo.svg" alt="" /><div><b>NUR_CHAT</b><small>Новый Уренгой · 18+</small></div></div>
         <div className="top-right">
-          <button className="chip balance-chip" onClick={() => setTab('wallet')}>{me.balance} NC</button>
+          <button className="chip balance-chip" onClick={() => setTab('wallet')}><span className="coin">N</span>{me.balance.toLocaleString('ru-RU')}</button>
           <button className="icon-btn" onClick={() => setNotifOpen(true)} aria-label="Уведомления">
             <Bell size={19} />{unread > 0 && <span className="dot">{unread > 9 ? '9+' : unread}</span>}
           </button>
         </div>
       </header>
 
-      <main className={'content' + (tab === 'chat' ? ' full' : '')}>
+      <main key={tab} className={'content fade' + (tab === 'chat' ? ' full' : '')}>
         {tab === 'chat' && <ChatScreen me={me} refreshMe={refreshMe} onOpenProfile={setProfileId} />}
         {tab === 'members' && <MembersScreen onOpenProfile={setProfileId} />}
         {tab === 'wallet' && <WalletScreen me={me} refreshMe={refreshMe} />}

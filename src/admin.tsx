@@ -325,6 +325,7 @@ function ChatSettings() {
         <textarea className="input" rows={8} value={s.rules_text ?? ''} onChange={(e) => setS({ ...s, rules_text: e.target.value })} />
       </label>
       <button className="btn primary" disabled={busy} onClick={() => save('rules_text', s.rules_text ?? '')}>Сохранить правила</button>
+      <ClearChat />
       <p className="muted small">Версия политики: {s.policy_version}. Её повышение заставит всех участников принять условия заново (делается вручную в базе).</p>
     </div>
   )
@@ -354,6 +355,34 @@ function Log() {
       {rows.map((r) => (
         <div key={r.id} className="row col"><b>{r.action}</b><small className="muted">{fmtDate(r.at)}{r.reason ? ' · ' + r.reason : ''}</small></div>
       ))}
+    </div>
+  )
+}
+
+function ClearChat() {
+  const [open, setOpen] = useState(false)
+  const [reason, setReason] = useState('')
+  const [word, setWord] = useState('')
+  const { run, busy } = useAction()
+  const go = async () => {
+    const r = await run(() => rpc<{ deleted: number; media: string[] }>('admin_clear_chat', { p_reason: reason }))
+    if (!r) return
+    for (let i = 0; i < r.media.length; i += 100) await supabase.storage.from('chat-media').remove(r.media.slice(i, i + 100))
+    setOpen(false); setReason(''); setWord('')
+  }
+  return (
+    <div className="danger-zone">
+      <b>Опасная зона</b>
+      <p className="muted small">Удалит все сообщения и фото из чата. Тексты остаются в закрытом архиве модерации (до 1 года) для разбора жалоб. Действие фиксируется в журнале.</p>
+      <button className="btn danger" onClick={() => setOpen(true)}>Очистить чат полностью</button>
+      {open && (
+        <Sheet title="Очистить чат" kicker="Необратимо" onClose={() => setOpen(false)}>
+          <p>Все сообщения и фото будут удалены у всех участников.</p>
+          <input className="input" placeholder="Причина (в журнал)" value={reason} onChange={(e) => setReason(e.target.value)} />
+          <input className="input" placeholder="Введите ОЧИСТИТЬ" value={word} onChange={(e) => setWord(e.target.value)} />
+          <button className="btn danger block" disabled={busy || reason.trim().length < 3 || word.trim().toUpperCase() !== 'ОЧИСТИТЬ'} onClick={go}>Удалить всё</button>
+        </Sheet>
+      )}
     </div>
   )
 }
