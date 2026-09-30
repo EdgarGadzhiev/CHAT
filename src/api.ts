@@ -15,6 +15,8 @@ export type Me = {
   consent_ok: boolean
   policy_version: string
   created_at: string
+  dm_enabled: boolean
+  dm_feature: boolean
 }
 
 export type Msg = {
@@ -35,7 +37,21 @@ export type Msg = {
   reactions: Record<string, { n: number; me: boolean }>
 }
 
-export type Member = { id: string; display_name: string; bio: string; role: string; photo_url: string | null }
+export type Member = { id: string; display_name: string; bio: string; role: string; photo_url: string | null; dm_enabled: boolean }
+
+export type Peer = { id: string; name: string; photo: string | null }
+export type Dialog = {
+  conversation_id: number; user_id: string; display_name: string; photo_url: string | null; role: string
+  last_body: string; last_deleted: boolean; last_mine: boolean; last_at: string; unread: number
+}
+export type DmMsg = { id: number; mine: boolean; status: 'visible' | 'deleted'; created_at: string; body: string }
+export type DmThread = {
+  other: { id: string; display_name: string; role: string; photo_url: string | null }
+  blocked_by_me: boolean; can_send: boolean; other_read_id: number; messages: DmMsg[]
+}
+
+/** Шина событий личных сообщений: 'ping' — пришло с сервера, 'local' — изменили мы сами. */
+export const dmBus = new EventTarget()
 export type Gift = { id: number; title: string; emoji: string; price: number; enabled: boolean; sort: number }
 export type PromoOption = { id: number; kind: 'top' | 'highlight'; title: string; price: number; duration_minutes: number; enabled: boolean }
 export type Pack = { id: number; nc_amount: number; price_kop: number; enabled: boolean }
@@ -76,6 +92,12 @@ const ERRORS: Record<string, string> = {
   forbidden: 'Недостаточно прав.',
   reason_required: 'Укажите причину.',
   payments_not_configured: 'Оплата пока не подключена.',
+  dm_disabled: 'Личные сообщения временно отключены.',
+  self_dm: 'Нельзя написать самому себе.',
+  dm_unavailable: 'Этот пользователь не принимает личные сообщения.',
+  you_blocked: 'Вы заблокировали этого пользователя. Разблокируйте его, чтобы написать.',
+  dm_too_early: 'Личные сообщения станут доступны через несколько минут после регистрации.',
+  spam_detected: 'Похоже на спам: одинаковое сообщение нескольким людям. Попробуйте написать иначе.',
   'blocked:links': 'Ссылки в чате запрещены.',
   'blocked:email': 'Не публикуйте email-адреса.',
   'blocked:contacts': 'Не публикуйте контакты (@username).',

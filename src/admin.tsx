@@ -44,6 +44,7 @@ export function AdminScreen({ me }: { me: Me }) {
 type Report = {
   id: number; category: string; comment: string | null; status: string; decision: string | null; resolution_note: string | null; created_at: string
   reporter: string; target_id: string; target: string; message_id: number | null; message_status: string | null; snapshot: string | null; has_media: boolean
+  is_dm: boolean; context: string | null
 }
 
 function Reports({ me, onUser }: { me: Me; onUser: (id: string) => void }) {
@@ -63,7 +64,9 @@ function Reports({ me, onUser }: { me: Me; onUser: (id: string) => void }) {
         <div key={r.id} className="card-row">
           <div className="between"><b>{catLabel(r.category)}</b><span className={'chip st-' + r.status}>{r.status === 'new' ? 'новая' : r.decision ?? r.status}</span></div>
           <div className="muted small">#{r.id} · {fmtDate(r.created_at)} · от {r.reporter} на <button className="link" onClick={() => onUser(r.target_id)}>{r.target}</button></div>
+          {r.is_dm && <span className="chip">личное сообщение · приватная переписка</span>}
           {r.snapshot && <blockquote className="quote">{r.snapshot}</blockquote>}
+          {r.is_dm && r.context && <><span className="muted small">Контекст (предыдущие сообщения):</span><blockquote className="quote pre">{r.context}</blockquote></>}
           {r.has_media && <span className="chip">есть фото</span>}
           {r.message_status && r.message_status !== 'visible' && <span className="chip">сообщение: {r.message_status}</span>}
           {r.comment && <p className="small">Комментарий: {r.comment}</p>}
@@ -302,6 +305,8 @@ const SETTING_KEYS: [string, string, 'number' | 'bool'][] = [
   ['max_message_len', 'Макс. длина сообщения', 'number'],
   ['media_min_account_minutes', 'Фото разрешены через N минут после регистрации', 'number'],
   ['links_allowed', 'Разрешить ссылки (не рекомендуется)', 'bool'],
+  ['dm_feature', 'Личные сообщения включены', 'bool'],
+  ['dm_min_account_minutes', 'Личные сообщения: новому аккаунту через N минут', 'number'],
   ['chat_enabled', 'Чат включён', 'bool'],
 ]
 

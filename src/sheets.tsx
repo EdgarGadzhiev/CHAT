@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
-import { Flag, Gift as GiftIcon } from 'lucide-react'
+import { Flag, Gift as GiftIcon, MessageCircle } from 'lucide-react'
 import { supabase } from './supabase'
-import { REPORT_CATEGORIES, rpc, type Gift, type Me, type Msg, type PromoOption } from './api'
+import { REPORT_CATEGORIES, rpc, type Gift, type Me, type Msg, type Peer, type PromoOption } from './api'
 import { Avatar, Empty, Sheet, Skeleton, useAction } from './ui'
 
-export type ReportTarget = { kind: 'message'; id: number; author: string } | { kind: 'user'; id: string; author: string }
+export type ReportTarget =
+  | { kind: 'message'; id: number; author: string }
+  | { kind: 'dm'; id: number; author: string }
+  | { kind: 'user'; id: string; author: string }
 
 export function ReportSheet({ target, onClose }: { target: ReportTarget; onClose: () => void }) {
   const [cat, setCat] = useState('')
@@ -14,6 +17,7 @@ export function ReportSheet({ target, onClose }: { target: ReportTarget; onClose
   const send = async () => {
     const ok = await run(async () => {
       if (target.kind === 'message') await rpc('report_message', { p_message: target.id, p_category: cat, p_comment: comment || null })
+      else if (target.kind === 'dm') await rpc('report_dm_message', { p_message: target.id, p_category: cat, p_comment: comment || null })
       else await rpc('report_user', { p_user: target.id, p_category: cat, p_comment: comment || null })
       return true
     }, 'Жалоба отправлена администрации')
@@ -21,7 +25,7 @@ export function ReportSheet({ target, onClose }: { target: ReportTarget; onClose
   }
 
   return (
-    <Sheet title="Пожаловаться" kicker={target.kind === 'message' ? `Сообщение · ${target.author}` : `Пользователь · ${target.author}`} onClose={onClose}>
+    <Sheet title="Пожаловаться" kicker={target.kind === 'user' ? `Пользователь · ${target.author}` : `${target.kind === 'dm' ? 'Личное сообщение' : 'Сообщение'} · ${target.author}`} onClose={onClose}>
       <div className="radio-list">
         {REPORT_CATEGORIES.map(([k, label]) => (
           <label key={k} className={'radio' + (cat === k ? ' on' : '')}>
@@ -32,7 +36,7 @@ export function ReportSheet({ target, onClose }: { target: ReportTarget; onClose
       </div>
       <textarea className="input" rows={3} maxLength={300} placeholder="Комментарий (необязательно)" value={comment} onChange={(e) => setComment(e.target.value)} />
       <button className="btn primary block" disabled={!cat || busy} onClick={send}>Отправить жалобу</button>
-      <p className="muted small">Жалобу рассматривает модератор. Заведомо ложные жалобы ведут к ограничению.</p>
+      <p className="muted small">{target.kind === 'dm' ? 'Модератор увидит только это сообщение и несколько предыдущих — остальная переписка остаётся приватной. ' : ''}Заведомо ложные жалобы ведут к ограничению.</p>
     </Sheet>
   )
 }
@@ -100,9 +104,9 @@ export function PromoteSheet({ msg, me, onClose, onSpent }: { msg: Msg; me: Me; 
   )
 }
 
-type ProfileData = { id: string; display_name: string; bio: string; role: string; photo_url: string | null; banned: boolean; created_at: string; messages: number; gifts: { emoji: string; title: string; n: number }[] }
+type ProfileData = { dm_enabled: boolean; id: string; display_name: string; bio: string; role: string; photo_url: string | null; banned: boolean; created_at: string; messages: number; gifts: { emoji: string; title: string; n: number }[] }
 
-export function ProfileSheet({ userId, me, onClose, onSpent }: { userId: string; me: Me; onClose: () => void; onSpent: () => void }) {
+export function ProfileSheet({ userId, me, onClose, onSpent, onMessage }: { userId: string; me: Me; onClose: () => void; onSpent: () => void; onMessage?: (peer: Peer) => void }) {
   const [p, setP] = useState<ProfileData | null | undefined>(undefined)
   const [sub, setSub] = useState<'gift' | 'report' | null>(null)
   useEffect(() => { rpc<ProfileData | null>('get_profile', { p_id: userId }).then(setP).catch(() => setP(null)) }, [userId])
@@ -123,10 +127,17 @@ export function ProfileSheet({ userId, me, onClose, onSpent }: { userId: string;
               <div className="chips">{p.gifts.map((g) => <span key={g.emoji} className="chip" title={g.title}>{g.emoji} × {g.n}</span>)}</div>
             )}
             {p.id !== me.id && (
-              <div className="actions">
-                <button className="btn primary" onClick={() => setSub('gift')}><GiftIcon size={16} /> Подарить</button>
-                <button className="btn" onClick={() => setSub('report')}><Flag size={16} /> Пожаловаться</button>
-              </div>
+              <>
+                {me.dm_feature && onMessage && (p.dm_enabled ? (
+                  <button className="btn primary block big" onClick={() => onMessage({ id: p.id, name: p.display_name, photo: p.photo_url })}><MessageCircle size={18} /> Написать</button>
+                ) : (
+                  <p className="muted small dm-off">Этот участник не принимает личные сообщения</p>
+                ))}
+                <div className="actions">
+                  <button className="btn" onClick={() => setSub('gift')}><GiftIcon size={16} /> Подарить</button>
+                  <button className="btn" onClick={() => setSub('report')}><Flag size={16} /> Пожаловаться</button>
+                </div>
+              </>
             )}
           </>
         )}

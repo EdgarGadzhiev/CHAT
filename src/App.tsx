@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Bell, MessageCircle, ShieldAlert, UserRound, Users, Wallet } from 'lucide-react'
 import { supabase } from './supabase'
-import { callFunction, rpc, type Me } from './api'
+import { callFunction, dmBus, rpc, type Me, type Peer } from './api'
 import { getTelegramUser, getTelegramWebApp, initTelegramWebApp } from './telegram'
 import { Blocked, Consent, Notice, Splash } from './screens'
 import { ChatScreen } from './chat'
 import { WalletScreen } from './wallet'
 import { MembersScreen, NotificationsSheet, ProfileScreen } from './people'
 import { ProfileSheet } from './sheets'
+import { DmScreen } from './dm'
 import { AdminScreen } from './admin'
 
 type Tab = 'chat' | 'members' | 'wallet' | 'profile' | 'admin'
@@ -26,6 +27,8 @@ export default function App() {
   const [profileId, setProfileId] = useState<string | null>(null)
   const [notifOpen, setNotifOpen] = useState(false)
   const [unread, setUnread] = useState(0)
+  const [dm, setDm] = useState<Peer | null>(null)
+  const [dmUnread, setDmUnread] = useState(0)
 
   const refreshMe = useCallback(() => {
     rpc<Me | null>('get_me').then((m) => m && setMe(m)).catch(() => {})
@@ -33,6 +36,10 @@ export default function App() {
 
   const refreshUnread = useCallback(() => {
     supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('read', false).then(({ count }) => setUnread(count ?? 0))
+  }, [])
+
+  const refreshDmUnread = useCallback(() => {
+    rpc<number>('dm_unread_count').then((n) => setDmUnread(n ?? 0)).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -66,9 +73,24 @@ export default function App() {
   useEffect(() => {
     if (phase !== 'ready') return
     refreshUnread()
-    const iv = setInterval(() => { refreshMe(); refreshUnread() }, 60000)
+    refreshDmUnread()
+    const iv = setInterval(() => { refreshMe(); refreshUnread(); refreshDmUnread() }, 60000)
     return () => clearInterval(iv)
-  }, [phase, refreshMe, refreshUnread])
+  }, [phase, refreshMe, refreshUnread, refreshDmUnread])
+
+  // Личные сообщения: приватный канал «dm:<id>» присылает только сигнал «что-то пришло» (без текста)
+  const myId = me?.id
+  const dmFeature = me?.dm_feature
+  useEffect(() => {
+    if (phase !== 'ready' || !myId || !dmFeature) return
+    const ch = supabase
+      .channel('dm:' + myId, { config: { private: true } })
+      .on('broadcast', { event: 'ping' }, () => { dmBus.dispatchEvent(new Event('ping')); refreshDmUnread() })
+      .subscribe()
+    const onLocal = () => refreshDmUnread()
+    dmBus.addEventListener('local', onLocal)
+    return () => { supabase.removeChannel(ch); dmBus.removeEventListener('local', onLocal) }
+  }, [phase, myId, dmFeature, refreshDmUnread])
 
   if (phase === 'loading') return <Splash />
   if (phase === 'no-telegram') return <Notice title="Откройте NUR_CHAT в Telegram" text="Вход выполняется через ваш аккаунт Telegram. Откройте приложение через бота." />
@@ -96,7 +118,7 @@ export default function App() {
 
       <main key={tab} className={'content fade' + (tab === 'chat' ? ' full' : '')}>
         {tab === 'chat' && <ChatScreen me={me} refreshMe={refreshMe} onOpenProfile={setProfileId} />}
-        {tab === 'members' && <MembersScreen onOpenProfile={setProfileId} />}
+        {tab === 'members' && <MembersScreen me={me} dmUnread={dmUnread} onOpenProfile={setProfileId} onOpenDm={setDm} />}
         {tab === 'wallet' && <WalletScreen me={me} refreshMe={refreshMe} />}
         {tab === 'profile' && <ProfileScreen me={me} refreshMe={refreshMe} />}
         {tab === 'admin' && staff && <AdminScreen me={me} />}
@@ -104,11 +126,17 @@ export default function App() {
 
       <nav className="bottom-nav">
         {tabs.map(([k, label, Icon]) => (
-          <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}><Icon size={20} /><span>{label}</span></button>
+          <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>
+            <span className="nav-ico"><Icon size={20} />{k === 'members' && dmUnread > 0 && <i className="nav-badge">{dmUnread > 9 ? '9+' : dmUnread}</i>}</span><span>{label}</span>
+          </button>
         ))}
       </nav>
 
-      {profileId && <ProfileSheet userId={profileId} me={me} onClose={() => setProfileId(null)} onSpent={refreshMe} />}
+      {dm && <DmScreen me={me} peer={dm} onClose={() => { setDm(null); refreshDmUnread() }} onOpenProfile={setProfileId} />}
+      {profileId && (
+        <ProfileSheet userId={profileId} me={me} onClose={() => setProfileId(null)} onSpent={refreshMe}
+          onMessage={(p) => { setProfileId(null); setDm(p) }} />
+      )}
       {notifOpen && <NotificationsSheet onClose={() => { setNotifOpen(false); refreshUnread() }} onRead={() => setUnread(0)} />}
     </div>
   )

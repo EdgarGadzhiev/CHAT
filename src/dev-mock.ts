@@ -4,7 +4,7 @@ const ago = (min: number) => new Date(now - min * 60000).toISOString()
 
 const me = {
   id: 'me', display_name: 'Эдгар', bio: 'Люблю Новый Уренгой и северное сияние', show_photo: false, photo_url: null, role: 'admin',
-  status: 'active', ban_reason: null, banned_until: null, muted_until: null, balance: 1250, consent_ok: true, policy_version: '2.0', created_at: ago(60 * 24 * 30),
+  status: 'active', ban_reason: null, banned_until: null, muted_until: null, balance: 1250, consent_ok: true, policy_version: '2.1', created_at: ago(60 * 24 * 30), dm_enabled: true, dm_feature: true,
 }
 const msg = (id: number, user: string, author: string, body: string, min: number, extra: Record<string, unknown> = {}) => ({
   id, user_id: user, status: 'visible', created_at: ago(min), body, media_path: null, reply_to: null, pinned: false, boosted: false, highlighted: false,
@@ -20,7 +20,7 @@ const messages = [
   { ...msg(7, 'u4', 'Модератор', '', 5), status: 'deleted' },
   msg(8, 'me', 'Эдгар', 'Правила чата — в шапке, соблюдаем уважение', 2, { pinned: true, author_role: 'admin' }),
 ]
-const members = ['Александр', 'Fyntik', 'Эмир', 'Эдгар', 'Мария'].map((n, i) => ({ id: 'u' + i, display_name: n, bio: i % 2 ? '' : 'Живу в Новом Уренгое', role: n === 'Эдгар' ? 'admin' : 'user', photo_url: null }))
+const members = ['Александр', 'Fyntik', 'Эмир', 'Эдгар', 'Мария'].map((n, i) => ({ id: 'u' + i, display_name: n, bio: i % 2 ? '' : 'Живу в Новом Уренгое', role: n === 'Эдгар' ? 'admin' : 'user', photo_url: null, dm_enabled: n !== 'Мария' }))
 const tables: Record<string, unknown[]> = {
   gifts: [['❤️', 'Сердце', 25], ['🌹', 'Роза', 50], ['💎', 'Алмаз', 100], ['🎁', 'Подарок', 150], ['🔥', 'Огонь', 200], ['👑', 'Корона', 500]].map(([emoji, title, price], id) => ({ id, emoji, title, price, enabled: true, sort: id })),
   promo_options: [{ id: 1, kind: 'top', title: 'В топ на 1 час', price: 50, duration_minutes: 60, enabled: true }, { id: 2, kind: 'highlight', title: 'Выделить на 24 часа', price: 30, duration_minutes: 1440, enabled: true }],
@@ -35,8 +35,25 @@ function rpc(fn: string): unknown {
     case 'get_messages': return messages
     case 'get_top_messages': return messages.filter((m) => m.pinned || m.boosted)
     case 'list_members': return members
-    case 'get_profile': return { ...members[0], banned: false, created_at: ago(9999), messages: 42, gifts: [{ emoji: '🌹', title: 'Роза', n: 2 }, { emoji: '💎', title: 'Алмаз', n: 1 }] }
+    case 'get_profile': return { ...members[0], banned: false, dm_enabled: true, created_at: ago(9999), messages: 42, gifts: [{ emoji: '🌹', title: 'Роза', n: 2 }, { emoji: '💎', title: 'Алмаз', n: 1 }] }
     case 'my_gifts_history': return [{ id: 1, emoji: '🌹', title: 'Роза', price: 50, created_at: ago(200), direction: 'in', other: 'Мария' }]
+    case 'dm_unread_count': return 3
+    case 'dm_list': return [
+      { conversation_id: 1, user_id: 'u1', display_name: 'Александр', photo_url: null, role: 'user', last_body: 'Кинотеатр сегодня работает?', last_deleted: false, last_mine: false, last_at: ago(4), unread: 2 },
+      { conversation_id: 2, user_id: 'u2', display_name: 'Fyntik', photo_url: null, role: 'user', last_body: 'Договорились, до встречи!', last_deleted: false, last_mine: true, last_at: ago(60 * 5), unread: 0 },
+      { conversation_id: 3, user_id: 'u3', display_name: 'Эмир', photo_url: null, role: 'user', last_body: '', last_deleted: true, last_mine: false, last_at: ago(60 * 30), unread: 1 },
+    ]
+    case 'dm_get': return {
+      other: { id: 'u1', display_name: 'Александр', role: 'user', photo_url: null }, blocked_by_me: false, can_send: true, other_read_id: 11,
+      messages: [
+        { id: 9, mine: false, status: 'visible', created_at: ago(60 * 26), body: 'Привет! Ты вчера был на набережной?' },
+        { id: 10, mine: true, status: 'visible', created_at: ago(60 * 25), body: 'Привет! Да, гулял с собакой 🐕' },
+        { id: 11, mine: true, status: 'visible', created_at: ago(60 * 3), body: 'А ты?' },
+        { id: 12, mine: false, status: 'visible', created_at: ago(7), body: 'Я был немного позже, не пересеклись' },
+        { id: 13, mine: false, status: 'visible', created_at: ago(4), body: 'Кинотеатр сегодня работает?' },
+        { id: 14, mine: true, status: 'deleted', created_at: ago(3), body: '' },
+      ] }
+    case 'list_blocked': return [{ id: 'u9', display_name: 'Спамер', photo_url: null }]
     case 'admin_stats': return { users: 128, banned: 2, messages_24h: 412, reports_new: 3, nc_in_circulation: 15400 }
     case 'admin_list_reports': return [{ id: 1, category: 'spam', comment: 'Рассылает рекламу', status: 'new', decision: null, resolution_note: null, created_at: ago(30), reporter: 'Мария', target_id: 'u3', target: 'Эмир', message_id: 5, message_status: 'visible', snapshot: 'Ищу попутчиков до Тарко-Сале', has_media: false }]
     default: return []

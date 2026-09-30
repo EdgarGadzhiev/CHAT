@@ -1,0 +1,51 @@
+/* ───── личные сообщения ───── */
+.nav-ico{position:relative;display:inline-flex}
+.nav-badge{position:absolute;top:-6px;right:-11px;min-width:17px;height:17px;padding:0 5px;border-radius:9px;background:var(--danger);color:#fff;font-size:10px;font-weight:800;font-style:normal;display:grid;place-items:center;box-shadow:0 0 0 2px rgba(20,24,34,.9)}
+.seg-badge{margin-left:6px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--danger);color:#fff;font-size:10.5px;font-weight:800;font-style:normal;display:inline-grid;place-items:center;vertical-align:1px}
+
+.member-wrap{display:flex;align-items:center}
+.member-wrap .member{flex:1;min-width:0}
+.dm-btn{flex:none;width:42px;height:42px;margin-right:12px;border-radius:14px;display:grid;place-items:center;color:#c9ceff;background:linear-gradient(135deg,rgba(108,124,255,.3),rgba(138,79,224,.22));border:1px solid rgba(140,150,255,.25);transition:.15s}
+.dm-btn:active{transform:scale(.92)}
+.unblock{margin-right:12px;flex:none}
+.group-pad{padding:2px 14px}
+.dm-off{text-align:center;margin:12px 0 0}
+
+/* список диалогов */
+.dialog{display:flex;align-items:center;gap:12px;width:100%;padding:12px 14px;text-align:left;background:none;transition:background .15s}
+.dialog:active{background:rgba(255,255,255,.05)}
+.dialog-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.dialog-top,.dialog-bottom{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.dialog-top b{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dialog-top small{color:var(--muted);font-size:11.5px;flex:none}
+.preview{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.preview em{font-style:normal;color:#9fa8ff}
+.preview.strong{color:var(--text);font-weight:600}
+.unread-badge{flex:none;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-size:11px;font-weight:800;font-style:normal;display:grid;place-items:center}
+
+/* экран переписки */
+.dm{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;height:100dvh;
+  background:radial-gradient(60% 40% at 15% -5%,rgba(108,124,255,.2),transparent 70%),radial-gradient(50% 35% at 100% 10%,rgba(138,79,224,.16),transparent 70%),var(--bg);animation:slidein .2s ease-out}
+@keyframes slidein{from{transform:translateX(24px);opacity:0}}
+.dm-head{flex:none;display:flex;align-items:center;gap:6px;padding:8px 10px;padding-top:calc(8px + env(safe-area-inset-top));background:rgba(11,13,18,.82);backdrop-filter:blur(12px);border-bottom:1px solid rgba(255,255,255,.06)}
+.icon-btn.plain{background:none;border-color:transparent}
+.dm-who{flex:1;min-width:0;display:flex;align-items:center;gap:10px;text-align:left;padding:2px 4px;border-radius:12px}
+.dm-who span:last-child{display:flex;flex-direction:column;min-width:0}.dm-who b{font-size:15.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dm-who small{font-size:11.5px;color:var(--muted)}
+.dm-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:12px;display:flex;flex-direction:column;gap:5px;scrollbar-width:none}
+.dm-body::-webkit-scrollbar{display:none}
+.dm-msg{position:relative;max-width:82%;padding:8px 12px 6px;border-radius:18px 18px 18px 6px;background:#171b26;border:1px solid var(--line);align-self:flex-start;text-align:left;display:flex;flex-direction:column;gap:2px;overflow-wrap:anywhere;transition:transform .12s}
+.dm-msg:active:not(:disabled){transform:scale(.985)}
+.dm-msg.mine{align-self:flex-end;border-radius:18px 18px 6px 18px;background:linear-gradient(135deg,#3c46c9,#5b3fc4);border-color:transparent;box-shadow:0 6px 18px rgba(80,70,220,.28)}
+.dm-msg.gone{background:transparent;border-style:dashed}
+.dm-text{font-size:15px;line-height:1.4;white-space:pre-wrap}
+.dm-meta{align-self:flex-end;display:inline-flex;align-items:center;gap:3px;font-size:10.5px;color:var(--muted)}
+.dm-msg.mine .dm-meta{color:rgba(255,255,255,.7)}
+.dm-meta .read{color:#8fffc9}
+.dm-note{margin:auto;max-width:300px;text-align:center;padding:20px 16px;border-radius:22px;background:var(--glass);border:1px solid rgba(255,255,255,.07)}
+.dm-note p{font-size:12.5px;color:var(--muted);margin:6px 0 0}
+.dm-note b{display:block;margin-top:8px;font-size:15px}
+.dm-note-icon{width:46px;height:46px;border-radius:16px;display:inline-grid;place-items:center;background:linear-gradient(135deg,rgba(108,124,255,.3),rgba(138,79,224,.22));color:#b9c0ff}
+.dm-foot{flex:none;padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+.muted-note.plain{color:var(--muted)}
+.quote.pre{white-space:pre-wrap}
+.dm-msg.gone{box-shadow:none}
